@@ -1,61 +1,136 @@
 # FinalProject_RustMiniOS
 
-`FinalProject_RustMiniOS` is a Rust bare-metal prototype for the shared `STM32F407ZG + 320x240 ILI9341 TFT resistive touch` board.
+Rust bare-metal MiniOS and 3D dungeon prototype for the shared `STM32F407ZG + 320x240 ILI9341 resistive-touch TFT` board.
 
 This repository is intentionally separate from:
 
 - `/Users/ivesliu/Documents/MCP2026/FinalProject_MiniOS`
 
-## What it does
+## Overview
 
-The current prototype includes:
+`FinalProject_RustMiniOS` is a touch-first embedded prototype that combines:
+
+- a custom launcher-style MiniOS UI
+- hardware control and touch calibration tools
+- map selection and settings
+- a textured software-raycast dungeon game
+
+The goal of this project is not just to blink LEDs or display menus. It is to show that a small STM32 board can run a polished, Rust-driven interactive system with:
+
+- multiple application screens
+- bilingual UI
+- configurable rendering quality
+- live FPS reporting
+- real gameplay with enemies, pickups, HUD, and weapon switching
+
+## Current experience
+
+The current playable build includes:
 
 - animated boot splash
-- mandatory touch calibration flow on startup
-- touch-first home launcher
-- map selection
-- settings for theme, language, and render strategy
-- a control/status page for board interaction
-- a textured 3D dungeon prototype built with software raycasting
+- mandatory touch calibration on startup
+- launcher-style home screen
+- `Map Select`
+- `Settings`
+- `Control Room`
+- `Touch Calibration`
+- `Dungeon Core` 3D prototype
 - enemy movement and damage
-- weapon switching
 - pickups and healing
+- multi-weapon combat loop
 - victory / defeat overlays
 - FPS counter
 
-## Project structure
+## Hardware
+
+| Item | Value |
+| --- | --- |
+| MCU | STM32F407ZG |
+| Display | 320x240 ILI9341 |
+| LCD bus | FSMC / 8080-style parallel |
+| Touch | Single-point resistive touch |
+| Rust target | `thumbv7em-none-eabihf` |
+
+## System architecture
+
+```mermaid
+flowchart LR
+    A["Boot Splash"] --> B["Touch Calibration"]
+    B --> C["Home Launcher"]
+    C --> D["Map Select"]
+    C --> E["Settings"]
+    C --> F["Control Room"]
+    D --> G["Dungeon Core"]
+    E --> G
+    G --> D
+    G --> C
+```
+
+## Source layout
 
 - `src/main.rs`
-  - top-level MiniOS flow, screen switching, touch calibration state
+  - top-level MiniOS flow, screen switching, calibration state, FPS sampling
 - `src/ui.rs`
-  - system UI screens such as Home, Map Select, Settings, Touch Calibration
+  - Home, Map Select, Settings, Touch Calibration, Control Room
 - `src/dungeon.rs`
-  - dungeon gameplay, rendering, HUD, touch controls
+  - gameplay, software raycasting, HUD, touch controls, overlays
 - `src/dungeon/data.rs`
   - map layouts, enemy spawns, pickup spawns
 - `src/dungeon/weapon.rs`
   - weapon definitions and tuning
 - `src/dungeon/strategy.rs`
-  - render quality modes
+  - render quality profiles
 - `src/touch.rs`
-  - resistive touch sampling and calibration
+  - resistive touch sampling, filtering, calibration
 - `src/display.rs`
-  - Rust-side display helpers and framebuffer upload glue
+  - display helpers and RGB565 upload bridge
 - `c_support/`
-  - reused STM32 clock init and TFT driver code compiled through FFI
+  - reused STM32 clock init and TFT driver code through FFI
 - `assets/`
-  - curated art assets and source packs
+  - curated textures, converted RGB565 data, and reference art
 - `preview/`
-  - lightweight browser UI preview used during iteration
+  - lightweight browser preview used during UI iteration
 - `tools/`
-  - helper scripts such as font generation and linker wrapper
+  - helper scripts such as font generation
+
+## Major features
+
+### MiniOS shell
+
+- touch-first launcher
+- dark / light theme support
+- English / Traditional Chinese toggle
+- touch calibration workflow
+- board interaction and status page
+
+### Dungeon Core
+
+- textured wall rendering
+- floor / ceiling rendering
+- enemy sprites with depth-based occlusion
+- weapon switching
+- pickups and healing
+- HUD, FPS counter, and overlays
+- multiple maps
+
+## Render strategy
+
+The project currently supports three render profiles:
+
+| Mode | Purpose | Current behavior |
+| --- | --- | --- |
+| `QUALITY` | best visual quality | full floor / ceiling detail |
+| `BALANCED` | default mode | lower floor / ceiling cost with similar look |
+| `PERFORMANCE` | highest speed | lower-cost wall and floor rendering |
+
+This setting is live in the system UI and is intended to show the tradeoff between image quality and performance on STM32-class hardware.
 
 ## Controls
 
 ### Startup
 
 - system boots into `Touch Calibration`
-- tap the five calibration targets in order
+- tap five calibration targets in order
 - after calibration, the system enters `Home`
 
 ### Home
@@ -69,10 +144,7 @@ The current prototype includes:
 
 - theme toggle
 - English / Traditional Chinese toggle
-- render strategy cycle:
-  - `QUALITY`
-  - `BALANCED`
-  - `PERFORMANCE`
+- render strategy cycle
 
 ### Dungeon Core
 
@@ -82,17 +154,6 @@ The current prototype includes:
 - `K0 + K1`: previous weapon
 - tap the center weapon chip: cycle weapon
 - hold `K0 + WKUP`: return
-
-## Render strategy
-
-The prototype supports three rendering profiles:
-
-- `QUALITY`
-  - full floor / ceiling detail
-- `BALANCED`
-  - reduced floor / ceiling cost with similar overall look
-- `PERFORMANCE`
-  - lower-cost wall and floor rendering for higher FPS
 
 ## Build
 
@@ -110,11 +171,8 @@ cargo run --release
 
 ## Environment notes
 
-- Rust target: `thumbv7em-none-eabihf`
-- MCU: `STM32F407ZG`
-- LCD path: FSMC / 8080-style parallel bus
 - the project expects PlatformIO packages under the default `~/.platformio/packages`
-- if your PlatformIO packages live somewhere else, set:
+- if your PlatformIO packages live elsewhere, set:
 
 ```bash
 export PLATFORMIO_PACKAGES_DIR=/your/path/to/.platformio/packages
@@ -122,6 +180,6 @@ export PLATFORMIO_PACKAGES_DIR=/your/path/to/.platformio/packages
 
 ## Notes
 
-- touch is single-point resistive touch, not multi-touch
+- touch is resistive single-touch, not true multi-touch
 - Chinese glyph data is generated into `src/font_zh.rs`
 - this repository does not modify `/Users/ivesliu/Documents/MCP2026/FinalProject_MiniOS`
