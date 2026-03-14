@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rust MiniOS Preview</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <h1>Rust MiniOS</h1>
+        <p>Local UI preview for layout tuning.</p>
+        <div class="nav-list">
+          <button class="nav-btn is-active" data-screen="home">Home</button>
+          <button class="nav-btn" data-screen="touch">Touch Lab</button>
+          <button class="nav-btn" data-screen="control">Control Room</button>
+          <button class="nav-btn" data-screen="aurora">Aurora Grid</button>
+          <button class="nav-btn" data-screen="dungeon">Dungeon Core</button>
+        </div>
+        <div class="notes">
+          <p>Use this preview to inspect spacing and typography before reflashing.</p>
+          <p>The real hardware is single-touch resistive, so dual-stick is visual only here.</p>
+        </div>
+      </aside>
+      <section class="stage">
+        <div class="device-frame">
+          <div class="device-screen screen-home" data-ui-screen="home">
+            <div class="hero-card">
+              <div class="hero-title">RUST MINI OS</div>
+              <div class="hero-subtitle">FLAGSHIP DUNGEON READY</div>
+              <div class="hero-chip">TOUCH LAB</div>
+            </div>
+            <div class="app-card selected">
+              <div class="card-title">DUNGEON CORE</div>
+              <div class="card-subtitle">RAYCASTER HERO</div>
+              <div class="card-open">OPEN</div>
+            </div>
+            <div class="app-card">
+              <div class="card-title">CONTROL ROOM</div>
+              <div class="card-subtitle">BOARD TELEMETRY</div>
+            </div>
+            <div class="app-card">
+              <div class="card-title">AURORA GRID</div>
+              <div class="card-subtitle">COLOR MOTION LAB</div>
+            </div>
+            <div class="footer-bar">K0 PREV   WK NEXT   K1 OPEN   TAP TOUCH LAB</div>
+          </div>
+
+          <div class="device-screen screen-touch hidden" data-ui-screen="touch">
+            <div class="top-bar">
+              <span>TOUCH CALIBRATION</span>
+              <span>K0 CANCEL</span>
+            </div>
+            <div class="info-card">
+              <div class="info-title">TAP THE CROSS WITH A PEN</div>
+              <div class="info-subtitle">RUNTIME ONLY, RECALIBRATE AFTER RESET</div>
+            </div>
+            <div class="step-chip">STEP 1/3</div>
+            <div class="cross-target">
+              <div class="cross-h"></div>
+              <div class="cross-v"></div>
+            </div>
+            <div class="footer-bar">RAW 0000 0000</div>
+          </div>
+
+          <div class="device-screen screen-control hidden" data-ui-screen="control">
+            <div class="top-bar accent-orange">
+              <span>CONTROL ROOM</span>
+              <span>K1 TOGGLE LED</span>
+            </div>
+            <div class="status-card">
+              <div class="status-title">UPTIME 128S</div>
+              <div class="status-led on">LED STATE ON</div>
+            </div>
+            <div class="three-grid">
+              <div class="small-card"><b>K1</b><span>MOVE OR OPEN</span></div>
+              <div class="small-card"><b>K0</b><span>BACK OR LEFT</span></div>
+              <div class="small-card"><b>WK</b><span>NEXT OR HOME</span></div>
+            </div>
+            <div class="footer-bar accent-amber">PRESS K0+WK TO RETURN HOME</div>
+          </div>
+
+          <div class="device-screen screen-aurora hidden" data-ui-screen="aurora">
+            <div class="top-bar accent-rose">
+              <span>AURORA GRID</span>
+              <span>K1 SHIFT   K0+WK HOME</span>
+            </div>
+            <div class="aurora-grid">
+              <div></div><div></div><div></div><div></div>
+              <div></div><div></div><div></div><div></div>
+              <div></div><div></div><div></div><div></div>
+              <div></div><div></div><div></div><div></div>
+              <div></div><div></div><div></div><div></div>
+            </div>
+            <div class="orb-card">
+              <div class="orb"></div>
+            </div>
+            <div class="footer-chip">VISUAL MOTION LAB</div>
+          </div>
+
+          <div class="device-screen screen-dungeon hidden" data-ui-screen="dungeon">
+            <div class="top-bar accent-cyan">
+              <span>DUNGEON CORE</span>
+              <span>TACTILE RAYCAST</span>
+            </div>
+            <div class="dungeon-layout">
+              <div class="mini-map">
+                <div class="player-dot"></div>
+                <div class="look-dot"></div>
+              </div>
+              <div class="hud-stack">
+                <div class="hud-box">X:25  Y:25</div>
+                <div class="hud-box">ONE TOUCH PAD</div>
+                <div class="hud-box">K0+WK = HOME</div>
+              </div>
+            </div>
+            <div class="viewport"></div>
+            <div class="control-row">
+              <div class="touch-pad move-pad">
+                <div class="pad-title">MOVE</div>
+                <div class="knob knob-cyan"></div>
+              </div>
+              <div class="touch-pad look-pad">
+                <div class="pad-title">LOOK</div>
+                <div class="knob knob-rose"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>
