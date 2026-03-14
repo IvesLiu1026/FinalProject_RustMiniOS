@@ -1,4 +1,6 @@
 /target
 .DS_Store
 .vscode
+assets/raw
+assets/source_packs
 .env
