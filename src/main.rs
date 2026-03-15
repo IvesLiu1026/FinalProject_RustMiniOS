@@ -49,7 +49,12 @@ fn main() -> ! {
         os.apply_persisted_state(state, &mut touch);
     }
 
-    boot_sequence(&mut display, os.theme(), safe_boot_requested);
+    boot_sequence(
+        &mut display,
+        os.theme(),
+        safe_boot_requested,
+        os.touch_ready(),
+    );
     board.set_led(false);
     let touch_state = touch.state();
     os.render(&mut display, &board, &touch_state, true);

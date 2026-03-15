@@ -38,8 +38,8 @@ impl MiniOs {
 
                 if touch.just_released {
                     for index in 0..home_app_count {
-                        let y = 64 + index as u16 * 39;
-                        if touch_started_in_rect(touch, 20, y, 280, 35) {
+                        let (x, y, width, height) = desktop_icon_rect(index);
+                        if touch_started_in_rect(touch, x, y, width, height) {
                             if self.home_index == index {
                                 self.open_selected_screen();
                             } else {
@@ -127,35 +127,58 @@ impl MiniOs {
                 if input.k0_just_pressed {
                     self.settings_index =
                         (self.settings_index + SETTINGS_ITEM_COUNT - 1) % SETTINGS_ITEM_COUNT;
+                    self.sync_settings_scroll_to_selection();
                     dirty = true;
                 }
                 if input.wkup_just_pressed {
                     self.settings_index = (self.settings_index + 1) % SETTINGS_ITEM_COUNT;
+                    self.sync_settings_scroll_to_selection();
                     dirty = true;
                 }
                 if input.k1_just_pressed {
                     return self.activate_settings_item();
                 }
+
+                if touch.just_pressed && settings_list_contains(touch.x, touch.y) {
+                    self.settings_drag_active = true;
+                    self.settings_drag_anchor_y = touch.y;
+                    self.settings_drag_origin_row = self.settings_scroll_top_row;
+                }
+
+                if self.settings_drag_active && touch.active && touch.dragging {
+                    let delta = self.settings_drag_anchor_y as i32 - touch.y as i32;
+                    let steps = delta / SETTINGS_ROW_HEIGHT as i32;
+                    let top = (self.settings_drag_origin_row as i32 + steps)
+                        .clamp(0, settings_max_scroll_top() as i32)
+                        as usize;
+                    if top != self.settings_scroll_top_row {
+                        self.settings_scroll_top_row = top;
+                        dirty = true;
+                    }
+                }
+
                 if touch.just_released {
+                    let was_drag = self.settings_drag_active && touch.dragging;
+                    self.settings_drag_active = false;
                     if touch_started_in_rect(touch, NAV_BACK_X, NAV_BACK_Y, NAV_BACK_W, NAV_BACK_H)
                     {
                         self.switch_screen(Screen::Home);
                         return true;
                     }
-                    for index in 0..SETTINGS_ITEM_COUNT {
-                        let y = 52 + index as u16 * 25;
-                        if touch_started_in_rect(touch, 20, y, 280, 24) {
+                    if was_drag {
+                        return dirty;
+                    }
+                    if let Some((tap_x, tap_y)) = released_tap_point(touch) {
+                        if let Some(index) =
+                            settings_item_at_point(tap_x, tap_y, self.settings_scroll_top_row)
+                        {
                             if self.settings_index == index {
                                 return self.activate_settings_item();
                             }
                             self.settings_index = index;
+                            self.sync_settings_scroll_to_selection();
                             dirty = true;
-                            break;
                         }
-                    }
-                    if touch_started_in_rect(touch, 22, 226, 276, 12) {
-                        self.switch_screen(Screen::Home);
-                        return true;
                     }
                 }
             }
@@ -357,6 +380,9 @@ impl MiniOs {
                     }
                     AutoBattleAction::Stay => {}
                 }
+                if self.auto_battle.take_persist_request() {
+                    self.save_storage();
+                }
                 self.auto_battle_redraw = self.auto_battle.take_redraw_request();
                 dirty = self.auto_battle_redraw.is_some();
             }
@@ -370,6 +396,38 @@ impl MiniOs {
                     TapRushAction::Stay => {}
                 }
                 dirty = self.tap_rush.needs_animation() || self.tap_rush.take_redraw_request();
+            }
+            Screen::PseudoRacer => {
+                match self.pseudo_racer.update(input, touch, dt_ms) {
+                    PseudoRacerAction::ExitGameCenter => {
+                        self.save_storage();
+                        self.switch_screen(Screen::GameCenter);
+                        return true;
+                    }
+                    PseudoRacerAction::Stay => {}
+                }
+                if self.pseudo_racer.take_persist_request() {
+                    self.save_storage();
+                }
+                dirty = self.pseudo_racer.needs_animation()
+                    || input.k0_just_pressed
+                    || input.k1_just_pressed
+                    || input.wkup_just_pressed
+                    || touch.just_released;
+            }
+            Screen::GraphicsLab => {
+                match self.graphics_lab.update(input, touch, dt_ms) {
+                    GraphicsLabAction::ExitGameCenter => {
+                        self.switch_screen(Screen::GameCenter);
+                        return true;
+                    }
+                    GraphicsLabAction::Stay => {}
+                }
+                dirty = self.graphics_lab.needs_animation()
+                    || input.k0_just_pressed
+                    || input.k1_just_pressed
+                    || input.wkup_just_pressed
+                    || touch.just_released;
             }
         }
         dirty
@@ -407,10 +465,18 @@ impl MiniOs {
             AppId::Settings => self.switch_screen(Screen::Settings),
             AppId::DungeonCore => self.switch_screen(Screen::MapSelect),
             AppId::AutoBattle => {
-                self.auto_battle.reset();
+                self.auto_battle.enter();
                 self.switch_screen(Screen::AutoBattle);
             }
             AppId::TapRush => self.switch_screen(Screen::TapRush),
+            AppId::PseudoRacer => {
+                self.pseudo_racer.enter();
+                self.switch_screen(Screen::PseudoRacer);
+            }
+            AppId::GraphicsLab => {
+                self.graphics_lab.enter();
+                self.switch_screen(Screen::GraphicsLab);
+            }
         }
     }
 
@@ -453,6 +519,16 @@ impl MiniOs {
                 true
             }
         }
+    }
+
+    pub(super) fn sync_settings_scroll_to_selection(&mut self) {
+        let visual_row = settings_visual_row_for_item(self.settings_index);
+        if visual_row < self.settings_scroll_top_row {
+            self.settings_scroll_top_row = visual_row;
+        } else if visual_row >= self.settings_scroll_top_row + SETTINGS_VISIBLE_ROWS {
+            self.settings_scroll_top_row = visual_row + 1 - SETTINGS_VISIBLE_ROWS;
+        }
+        self.settings_scroll_top_row = self.settings_scroll_top_row.min(settings_max_scroll_top());
     }
 
     fn activate_safe_mode_item(&mut self) -> bool {
@@ -516,16 +592,32 @@ impl MiniOs {
 
 fn touch_started_in_rect(touch: &TouchState, x: u16, y: u16, width: u16, height: u16) -> bool {
     if touch.dragging {
-        return false;
+        return point_in_rect_with_slop(touch.start_x, touch.start_y, x, y, width, height)
+            && point_in_rect_with_slop(touch.release_x, touch.release_y, x, y, width, height);
     }
 
-    let tap_x = ((touch.start_x as u32 + touch.release_x as u32) / 2) as u16;
-    let tap_y = ((touch.start_y as u32 + touch.release_y as u32) / 2) as u16;
+    let (tap_x, tap_y) = match released_tap_point(touch) {
+        Some(point) => point,
+        None => return false,
+    };
+    point_in_rect_with_slop(tap_x, tap_y, x, y, width, height)
+}
+
+fn released_tap_point(touch: &TouchState) -> Option<(u16, u16)> {
+    if !touch.just_released {
+        return None;
+    }
+    Some((
+        ((touch.start_x as u32 + touch.release_x as u32) / 2) as u16,
+        ((touch.start_y as u32 + touch.release_y as u32) / 2) as u16,
+    ))
+}
+
+fn point_in_rect_with_slop(px: u16, py: u16, x: u16, y: u16, width: u16, height: u16) -> bool {
     let slop = 10u16;
     let left = x.saturating_sub(slop);
     let top = y.saturating_sub(slop);
     let right = x.saturating_add(width).saturating_add(slop);
     let bottom = y.saturating_add(height).saturating_add(slop);
-
-    tap_x >= left && tap_x < right && tap_y >= top && tap_y < bottom
+    px >= left && px < right && py >= top && py < bottom
 }

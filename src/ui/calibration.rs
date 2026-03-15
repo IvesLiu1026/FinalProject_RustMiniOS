@@ -2,9 +2,12 @@ use core::fmt::Write;
 
 use heapless::String;
 
-use crate::display::{palette, Display, ThemeMode};
+use crate::display::{color, palette, Display, ThemeMode};
 
-use super::{draw_gradient_background, render_nav_back};
+use super::{
+    draw_footer_hint, draw_gradient_background, draw_info_strip, draw_shell_window, draw_title_bar,
+    render_nav_back,
+};
 
 pub fn render_touch_calibration(display: &mut Display, step: u8, theme: ThemeMode, zh_mode: bool) {
     const TARGET_X: [u16; 5] = [28, 292, 160, 292, 28];
@@ -20,33 +23,50 @@ pub fn render_touch_calibration(display: &mut Display, step: u8, theme: ThemeMod
 
     let ui = palette(theme);
     draw_gradient_background(display, theme, 120);
-    display.panel(16, 12, 288, 34, ui.panel, ui.orange);
-    render_nav_back(display, zh_mode, ui.white, &ui);
-    display.text(
-        74,
-        20,
+    draw_shell_window(display, ui.orange, &ui);
+    draw_title_bar(
+        display,
         if zh_mode {
-            "觸控校正"
+            "觸控校正精靈"
         } else {
-            "TOUCH CALIBRATION"
+            "TOUCH SETUP WIZARD"
         },
-        ui.text,
-        ui.panel,
-        2,
+        if zh_mode {
+            "five-point setup utility"
+        } else {
+            "five-point setup utility"
+        },
+        ui.orange,
+        &ui,
     );
-    display.text(
-        192,
-        22,
-        if zh_mode { "K0 取消" } else { "K0 CANCEL" },
-        ui.text_muted,
-        ui.panel,
-        1,
+    render_nav_back(display, zh_mode, ui.white, &ui);
+
+    draw_info_strip(
+        display,
+        18,
+        46,
+        132,
+        if zh_mode { "流程" } else { "SETUP" },
+        "5 POINT",
+        ui.cyan,
+        &ui,
+    );
+    draw_info_strip(
+        display,
+        164,
+        46,
+        138,
+        if zh_mode { "狀態" } else { "STATE" },
+        if zh_mode { "等待點擊" } else { "WAIT TAP" },
+        ui.amber,
+        &ui,
     );
 
-    display.panel(18, 58, 284, 46, ui.panel_alt, ui.cyan);
+    display.panel(18, 62, 284, 38, ui.panel_alt, ui.cyan);
+    draw_wizard_chip(display, 250, 70, &ui);
     display.text(
         28,
-        68,
+        72,
         if zh_mode {
             "依序點擊四角與中央"
         } else {
@@ -58,11 +78,11 @@ pub fn render_touch_calibration(display: &mut Display, step: u8, theme: ThemeMod
     );
     display.text(
         28,
-        88,
+        86,
         if zh_mode {
-            "重開機後需要重新校正"
+            "完成後會保存，之後開機可直接進桌面"
         } else {
-            "RUNTIME ONLY, RECALIBRATE AFTER RESET"
+            "SAVED AFTER FINISH, FUTURE BOOTS CAN GO STRAIGHT TO DESKTOP"
         },
         ui.text_muted,
         ui.panel_alt,
@@ -77,12 +97,12 @@ pub fn render_touch_calibration(display: &mut Display, step: u8, theme: ThemeMod
         if zh_mode { "步驟" } else { "STEP" },
         safe_step + 1
     );
-    display.panel(108, 116, 104, 24, ui.panel, ui.cyan);
-    display.centered_text(160, 124, &line, ui.text, ui.panel, 2);
-    display.panel(88, 146, 144, 24, ui.panel, ui.rose);
+    display.panel(108, 110, 104, 22, ui.panel, ui.cyan);
+    display.centered_text(160, 117, &line, ui.text, ui.panel, 1);
+    display.panel(88, 138, 144, 20, ui.panel, ui.rose);
     display.centered_text(
         160,
-        154,
+        144,
         if zh_mode {
             TARGET_LABELS_ZH[safe_step]
         } else {
@@ -93,22 +113,66 @@ pub fn render_touch_calibration(display: &mut Display, step: u8, theme: ThemeMod
         1,
     );
 
+    display.panel(54, 164, 212, 50, ui.panel, ui.orange);
+    display.text(
+        66,
+        176,
+        if zh_mode {
+            "校正區域"
+        } else {
+            "CALIBRATION FIELD"
+        },
+        ui.text,
+        ui.panel,
+        1,
+    );
     let tx = TARGET_X[safe_step];
     let ty = TARGET_Y[safe_step];
     display.fill_rect(tx.saturating_sub(20), ty, 40, 2, ui.rose);
     display.fill_rect(tx, ty.saturating_sub(20), 2, 40, ui.rose);
-
-    display.panel(18, 206, 284, 24, ui.panel, ui.white);
-    display.text(
-        28,
-        214,
-        if zh_mode {
-            "點一下記錄座標，完成後自動返回"
-        } else {
-            "TAP ONCE TO CAPTURE, AUTO RETURN WHEN DONE"
-        },
-        ui.text_muted,
-        ui.panel,
-        1,
+    display.fill_rect(
+        tx.saturating_sub(6),
+        ty.saturating_sub(6),
+        12,
+        12,
+        color::mix(ui.panel_alt, ui.rose, 24),
     );
+    display.stroke_rect(
+        tx.saturating_sub(6),
+        ty.saturating_sub(6),
+        12,
+        12,
+        1,
+        ui.rose,
+    );
+
+    for index in 0..5usize {
+        let dot_x = 118 + index as u16 * 18;
+        let fill = if index <= safe_step {
+            ui.cyan
+        } else {
+            ui.steel
+        };
+        display.fill_rect(dot_x, 198, 8, 8, fill);
+        display.stroke_rect(dot_x, 198, 8, 8, 1, ui.white);
+    }
+
+    draw_footer_hint(
+        display,
+        if zh_mode {
+            "TAP TARGET TO CAPTURE  K0 RETURNS WHEN CALIBRATION EXISTS"
+        } else {
+            "TAP TARGET TO CAPTURE  K0 RETURNS WHEN CALIBRATION EXISTS"
+        },
+        ui.white,
+        &ui,
+    );
+}
+
+fn draw_wizard_chip(display: &mut Display, x: u16, y: u16, ui: &crate::display::Palette) {
+    display.fill_rect(x, y, 24, 18, color::mix(ui.panel_alt, ui.orange, 18));
+    display.stroke_rect(x, y, 24, 18, 1, ui.orange);
+    display.fill_rect(x + 4, y + 4, 16, 10, ui.text);
+    display.fill_rect(x + 6, y + 6, 12, 6, color::mix(ui.panel_alt, ui.white, 18));
+    display.fill_rect(x + 10, y + 2, 4, 2, ui.amber);
 }

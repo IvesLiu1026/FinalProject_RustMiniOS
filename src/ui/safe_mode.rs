@@ -1,7 +1,9 @@
-use crate::display::{palette, Display, ThemeMode};
+use crate::display::{color, palette, Display, ThemeMode};
 use crate::system_info;
 
-use super::draw_gradient_background;
+use super::{
+    draw_footer_hint, draw_gradient_background, draw_info_strip, draw_shell_window, draw_title_bar,
+};
 
 pub fn render_safe_mode(
     display: &mut Display,
@@ -12,32 +14,45 @@ pub fn render_safe_mode(
 ) {
     let ui = palette(theme);
     draw_gradient_background(display, theme, 132);
-    display.panel(16, 12, 288, 34, ui.panel, ui.rose);
-    display.text(
-        28,
-        20,
+    draw_shell_window(display, ui.rose, &ui);
+    draw_title_bar(
+        display,
         if zh_mode { "安全模式" } else { "SAFE MODE" },
-        ui.text,
-        ui.panel,
-        2,
-    );
-    display.text(
-        152,
-        22,
         if zh_mode {
-            "最小化開機與修復入口"
+            "minimal boot + recovery"
         } else {
-            "MINIMAL BOOT + RECOVERY"
+            "minimal boot + recovery"
         },
-        ui.text_muted,
-        ui.panel,
-        1,
+        ui.rose,
+        &ui,
     );
 
-    display.panel(18, 56, 284, 42, ui.panel_alt, ui.orange);
+    draw_info_strip(
+        display,
+        18,
+        46,
+        132,
+        if zh_mode { "模式" } else { "BOOT" },
+        "SAFE",
+        ui.rose,
+        &ui,
+    );
+    draw_info_strip(
+        display,
+        164,
+        46,
+        138,
+        if zh_mode { "觸控" } else { "TOUCH" },
+        if touch_ready { "READY" } else { "BYPASS" },
+        if touch_ready { ui.cyan } else { ui.amber },
+        &ui,
+    );
+
+    display.panel(18, 62, 284, 38, ui.panel_alt, ui.orange);
+    draw_safe_mode_badge(display, 248, 70, &ui);
     display.text(
         28,
-        66,
+        72,
         system_info::safe_mode_hint(zh_mode),
         ui.text,
         ui.panel_alt,
@@ -45,7 +60,7 @@ pub fn render_safe_mode(
     );
     display.text(
         28,
-        82,
+        86,
         if touch_ready {
             if zh_mode {
                 "目前已有觸控校正，可直接進桌面"
@@ -70,9 +85,9 @@ pub fn render_safe_mode(
                 "CONTINUE TO HOME"
             },
             if zh_mode {
-                "離開安全模式，正常操作系統"
+                "離開安全模式"
             } else {
-                "LEAVE SAFE MODE AND OPEN THE DESKTOP"
+                "LEAVE SAFE MODE"
             },
             ui.cyan,
         ),
@@ -83,9 +98,9 @@ pub fn render_safe_mode(
                 "TOUCH CALIBRATION"
             },
             if zh_mode {
-                "重新建立可用的觸控校正"
+                "重新建立校正"
             } else {
-                "REBUILD A CLEAN TOUCH CALIBRATION"
+                "REBUILD CAL"
             },
             ui.amber,
         ),
@@ -96,9 +111,9 @@ pub fn render_safe_mode(
                 "DIAGNOSTICS"
             },
             if zh_mode {
-                "檢查儲存區、資產與恢復工具"
+                "檢查儲存區"
             } else {
-                "INSPECT STORAGE, ASSETS, AND RECOVERY TOOLS"
+                "CHECK STORAGE"
             },
             ui.lime,
         ),
@@ -110,21 +125,32 @@ pub fn render_safe_mode(
         let fill = if selected { ui.panel_alt } else { ui.panel };
         let border = if selected { *accent } else { ui.steel };
         display.panel(18, y, 284, 28, fill, border);
-        display.text(28, y + 6, title, ui.text, fill, 1);
-        display.text(28, y + 16, subtitle, ui.text_muted, fill, 1);
+        display.fill_rect(28, y + 7, 12, 12, color::mix(fill, *accent, 24));
+        display.stroke_rect(28, y + 7, 12, 12, 1, *accent);
+        display.fill_rect(32, y + 11, 4, 4, *accent);
+        display.text(46, y + 7, title, ui.text, fill, 1);
+        display.text(46, y + 17, subtitle, ui.text_muted, fill, 1);
+        if selected {
+            display.text(274, y + 10, ">", *accent, fill, 1);
+        }
     }
 
-    display.panel(18, 220, 284, 14, ui.panel_alt, ui.white);
-    display.text(
-        28,
-        223,
+    draw_footer_hint(
+        display,
         if zh_mode {
-            "K0/WK 選擇，K1 執行"
+            "K0/WK SELECT  K1 OPEN  HOLD K1 DURING BOOT TO RETURN"
         } else {
-            "K0/WK SELECT, K1 OPEN"
+            "K0/WK SELECT  K1 OPEN  HOLD K1 DURING BOOT TO RETURN"
         },
-        ui.text,
-        ui.panel_alt,
-        1,
+        ui.white,
+        &ui,
     );
+}
+
+fn draw_safe_mode_badge(display: &mut Display, x: u16, y: u16, ui: &crate::display::Palette) {
+    display.fill_rect(x, y, 28, 18, color::mix(ui.panel, ui.rose, 20));
+    display.stroke_rect(x, y, 28, 18, 1, ui.rose);
+    display.fill_rect(x + 6, y + 4, 16, 10, ui.text);
+    display.fill_rect(x + 9, y + 7, 10, 4, color::mix(ui.panel_alt, ui.amber, 22));
+    display.fill_rect(x + 11, y + 3, 6, 2, ui.amber);
 }

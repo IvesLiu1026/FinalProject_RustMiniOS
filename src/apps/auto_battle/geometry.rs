@@ -1,8 +1,8 @@
 use crate::display::Display;
 
 use super::{
-    ARENA_INNER_H, ARENA_INNER_W, ARENA_INNER_X, ARENA_INNER_Y, MAX_ARENA_DIRTY_RECTS, MAX_ENEMIES,
-    MAX_PROJECTILES,
+    ARENA_INNER_H, ARENA_INNER_W, ARENA_INNER_X, ARENA_INNER_Y, ARENA_X, ARENA_Y,
+    MAX_ARENA_DIRTY_RECTS, MAX_ENEMIES, MAX_PICKUPS, MAX_PROJECTILES,
 };
 
 #[derive(Clone, Copy)]
@@ -180,15 +180,36 @@ impl ProjectileFrame {
 }
 
 #[derive(Clone, Copy)]
+pub(super) struct PickupFrame {
+    pub(super) active: bool,
+    pub(super) x: i16,
+    pub(super) y: i16,
+    pub(super) size: i16,
+}
+
+impl PickupFrame {
+    pub(super) const fn empty() -> Self {
+        Self {
+            active: false,
+            x: 0,
+            y: 0,
+            size: 0,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
 pub(super) struct ArenaFrame {
     pub(super) player_x: i16,
     pub(super) player_y: i16,
     pub(super) target_x: i16,
     pub(super) target_y: i16,
     pub(super) moving: bool,
+    pub(super) banner_active: bool,
     pub(super) nearest_enemy: Option<(i16, i16)>,
     pub(super) enemies: [EnemyFrame; MAX_ENEMIES],
     pub(super) projectiles: [ProjectileFrame; MAX_PROJECTILES],
+    pub(super) pickups: [PickupFrame; MAX_PICKUPS],
 }
 
 impl ArenaFrame {
@@ -199,9 +220,11 @@ impl ArenaFrame {
             target_x: 0,
             target_y: 0,
             moving: false,
+            banner_active: false,
             nearest_enemy: None,
             enemies: [EnemyFrame::empty(); MAX_ENEMIES],
             projectiles: [ProjectileFrame::empty(); MAX_PROJECTILES],
+            pickups: [PickupFrame::empty(); MAX_PICKUPS],
         }
     }
 
@@ -216,6 +239,9 @@ impl ArenaFrame {
                 self.nearest_enemy,
             ));
         }
+        if self.banner_active {
+            regions.add(wave_banner_rect());
+        }
 
         for enemy in self.enemies {
             if enemy.active {
@@ -226,6 +252,12 @@ impl ArenaFrame {
         for projectile in self.projectiles {
             if projectile.active {
                 regions.add(projectile_rect(projectile));
+            }
+        }
+
+        for pickup in self.pickups {
+            if pickup.active {
+                regions.add(pickup_rect(pickup));
             }
         }
     }
@@ -256,10 +288,10 @@ pub(super) fn fill_rect_clipped(display: &mut Display, clip: Rect, target: Rect,
 
 pub(super) fn player_rect(px: i16, py: i16) -> Rect {
     Rect {
-        x: px - 12,
-        y: py - 12,
-        w: 24,
-        h: 24,
+        x: px - 18,
+        y: py - 18,
+        w: 36,
+        h: 36,
     }
 }
 
@@ -319,4 +351,23 @@ pub(super) fn nearest_indicator_rect(px: i16, py: i16, enemy: Option<(i16, i16)>
         h: py.max(ey) - py.min(ey) + 1,
     };
     target.union(horizontal).union(vertical)
+}
+
+pub(super) fn pickup_rect(pickup: PickupFrame) -> Rect {
+    let half = pickup.size / 2;
+    Rect {
+        x: pickup.x - half - 2,
+        y: pickup.y - half - 2,
+        w: pickup.size + 4,
+        h: pickup.size + 4,
+    }
+}
+
+pub(super) fn wave_banner_rect() -> Rect {
+    Rect {
+        x: (ARENA_X + 14) as i16,
+        y: (ARENA_Y + 10) as i16,
+        w: 156,
+        h: 30,
+    }
 }

@@ -3,28 +3,27 @@ use core::fmt::Write;
 use heapless::String;
 
 use crate::display::{color, palette, Display, ThemeMode};
-use crate::ui::{draw_gradient_background, render_nav_back};
+use crate::ui::{
+    draw_footer_hint, draw_gradient_background, draw_info_strip, draw_shell_window, draw_title_bar,
+    render_nav_back,
+};
 
 use super::geometry::{arena_inner_rect, fill_rect_clipped, DirtyRegions, Rect};
 use super::*;
 
+const RESULT_BUTTON_GAP: u16 = 8;
+
 impl AutoBattleApp {
     pub fn render(&mut self, display: &mut Display, theme: ThemeMode, zh_mode: bool) {
-        let ui = palette(theme);
-        draw_gradient_background(display, theme, 104);
-
-        self.render_header(display, zh_mode, &ui);
-        self.render_arena_region(display, &ui);
-        self.render_panel_region(display, zh_mode, &ui);
-
-        if self.state == BattleState::LevelUp {
-            self.render_level_up_overlay(display, zh_mode, &ui);
-        } else if !matches!(self.state, BattleState::Running) {
-            self.render_overlay(display, zh_mode, &ui);
-        }
-
-        if !matches!(self.state, BattleState::Running) {
-            self.render_footer(display, zh_mode, &ui);
+        match self.state {
+            BattleState::Profile => self.render_profile(display, theme, zh_mode),
+            BattleState::StageSelect => self.render_stage_select(display, theme, zh_mode),
+            BattleState::Running | BattleState::BossReward => {
+                self.render_battle(display, theme, zh_mode);
+            }
+            BattleState::StageClear | BattleState::Defeat => {
+                self.render_result(display, theme, zh_mode);
+            }
         }
     }
 
@@ -35,71 +34,681 @@ impl AutoBattleApp {
         zh_mode: bool,
         redraw: AutoBattleRedraw,
     ) {
+        if self.state != BattleState::Running {
+            self.render(display, theme, zh_mode);
+            return;
+        }
+
         let ui = palette(theme);
         match redraw {
             AutoBattleRedraw::Full => self.render(display, theme, zh_mode),
             AutoBattleRedraw::Arena => {
-                self.render_running_arena(display, &ui);
+                self.render_running_arena(display, zh_mode, &ui);
                 self.render_panel_region(display, zh_mode, &ui);
             }
             AutoBattleRedraw::ArenaAndPanel => {
-                self.render_running_arena(display, &ui);
+                self.render_running_arena(display, zh_mode, &ui);
                 self.render_panel_region(display, zh_mode, &ui);
             }
-            AutoBattleRedraw::Overlay => self.render_overlay_region(display, zh_mode, &ui),
         }
     }
 
-    fn render_header(&self, display: &mut Display, zh_mode: bool, ui: &crate::display::Palette) {
-        display.panel(12, 8, 152, 24, ui.panel, ui.orange);
-        render_nav_back(display, zh_mode, ui.white, &ui);
-        display.text(
-            74,
-            16,
+    fn render_profile(&self, display: &mut Display, theme: ThemeMode, zh_mode: bool) {
+        let ui = palette(theme);
+        draw_gradient_background(display, theme, 118);
+        draw_shell_window(display, ui.amber, &ui);
+        draw_title_bar(
+            display,
             if zh_mode {
-                "自動獵手"
+                "定點獵手"
             } else {
-                "AUTO HUNTER"
+                "STATION HUNTER"
             },
-            ui.text,
-            ui.panel,
-            1,
+            if zh_mode {
+                "hunter profile / permanent core"
+            } else {
+                "hunter profile / permanent core"
+            },
+            ui.amber,
+            &ui,
         );
-    }
+        render_nav_back(display, zh_mode, ui.white, &ui);
 
-    fn render_footer(&self, display: &mut Display, zh_mode: bool, ui: &crate::display::Palette) {
-        display.panel(18, 226, 284, 12, ui.panel, ui.white);
+        let mut xp_text: String<32> = String::new();
+        let _ = write!(
+            &mut xp_text,
+            "{}/{}",
+            self.profile.player_xp,
+            Self::xp_to_next_level(self.profile.player_level)
+        );
+        let mut unlock_text: String<24> = String::new();
+        let _ = write!(
+            &mut unlock_text,
+            "{} / {}",
+            self.profile.unlocked_stage, STAGE_COUNT
+        );
+        draw_info_strip(
+            display,
+            20,
+            44,
+            128,
+            if zh_mode { "獵手等級" } else { "HUNTER LV" },
+            &format_u8(self.profile.player_level),
+            ui.amber,
+            &ui,
+        );
+        draw_info_strip(
+            display,
+            156,
+            44,
+            144,
+            if zh_mode {
+                "經驗進度"
+            } else {
+                "XP TO NEXT"
+            },
+            &xp_text,
+            ui.cyan,
+            &ui,
+        );
+        draw_info_strip(
+            display,
+            20,
+            60,
+            128,
+            if zh_mode {
+                "升級點數"
+            } else {
+                "UPGRADE PTS"
+            },
+            &format_u8(self.profile.upgrade_points),
+            ui.lime,
+            &ui,
+        );
+        draw_info_strip(
+            display,
+            156,
+            60,
+            144,
+            if zh_mode { "解鎖關卡" } else { "UNLOCKED" },
+            &unlock_text,
+            ui.rose,
+            &ui,
+        );
+
+        for (index, action) in ProfileAction::ALL[..4].iter().copied().enumerate() {
+            let selected = self.profile_cursor == index;
+            self.render_profile_card(display, action, selected, zh_mode, &ui);
+        }
+
+        display.panel(20, 176, 148, 32, ui.panel, ui.cyan);
         display.text(
-            24,
-            228,
-            match self.state {
-                BattleState::LevelUp => {
-                    if zh_mode {
-                        "K0/WK 選 buff，K1 確認，也可以直接點卡片"
-                    } else {
-                        "K0/WK TO PICK, K1 TO CONFIRM, OR TAP A CARD"
-                    }
-                }
-                _ => {
-                    if zh_mode {
-                        "拖曳競技場移動，放手自動開火，K0 或返回離開"
-                    } else {
-                        "DRAG TO MOVE, RELEASE TO AUTO-FIRE, K0 OR BACK TO EXIT"
-                    }
-                }
+            28,
+            184,
+            if zh_mode {
+                "本機最高手數"
+            } else {
+                "BEST KILLS"
             },
             ui.text_muted,
             ui.panel,
             1,
         );
+        display.text(
+            28,
+            196,
+            &format_u16(self.profile.best_kills),
+            ui.text,
+            ui.panel,
+            1,
+        );
+
+        let deploy_selected = self.profile_cursor == 4;
+        let deploy_fill = if deploy_selected {
+            ui.panel_alt
+        } else {
+            ui.panel
+        };
+        let deploy_border = if deploy_selected { ui.amber } else { ui.steel };
+        display.panel(
+            PROFILE_DEPLOY_X,
+            PROFILE_DEPLOY_Y,
+            PROFILE_DEPLOY_W,
+            PROFILE_DEPLOY_H,
+            deploy_fill,
+            deploy_border,
+        );
+        display.centered_text(
+            PROFILE_DEPLOY_X + PROFILE_DEPLOY_W / 2,
+            PROFILE_DEPLOY_Y + 6,
+            if zh_mode {
+                "選關出擊"
+            } else {
+                "STAGE SELECT"
+            },
+            ui.text,
+            deploy_fill,
+            1,
+        );
+
+        draw_footer_hint(
+            display,
+            if zh_mode {
+                "K0/WK 選能力  K1 投資或進入選關"
+            } else {
+                "K0/WK MOVE  K1 INVEST OR OPEN STAGES"
+            },
+            ui.amber,
+            &ui,
+        );
     }
 
-    fn render_arena_region(&mut self, display: &mut Display, ui: &crate::display::Palette) {
+    fn render_profile_card(
+        &self,
+        display: &mut Display,
+        action: ProfileAction,
+        selected: bool,
+        zh_mode: bool,
+        ui: &crate::display::Palette,
+    ) {
+        let (x, y, w, h) = match action {
+            ProfileAction::Attack => (
+                PROFILE_LEFT_X,
+                PROFILE_TOP_Y,
+                PROFILE_CARD_W,
+                PROFILE_CARD_H,
+            ),
+            ProfileAction::Vitality => (
+                PROFILE_RIGHT_X,
+                PROFILE_TOP_Y,
+                PROFILE_CARD_W,
+                PROFILE_CARD_H,
+            ),
+            ProfileAction::Trigger => (
+                PROFILE_LEFT_X,
+                PROFILE_BOTTOM_Y,
+                PROFILE_CARD_W,
+                PROFILE_CARD_H,
+            ),
+            ProfileAction::Thrusters => (
+                PROFILE_RIGHT_X,
+                PROFILE_BOTTOM_Y,
+                PROFILE_CARD_W,
+                PROFILE_CARD_H,
+            ),
+            ProfileAction::Deploy => return,
+        };
+        let accent = match action {
+            ProfileAction::Attack => ui.rose,
+            ProfileAction::Vitality => ui.lime,
+            ProfileAction::Trigger => ui.amber,
+            ProfileAction::Thrusters => ui.cyan,
+            ProfileAction::Deploy => ui.amber,
+        };
+        let fill = if selected { ui.panel_alt } else { ui.panel };
+        let border = if selected { accent } else { ui.steel };
+        display.panel(x, y, w, h, fill, border);
+        display.text(
+            x + 10,
+            y + 8,
+            if zh_mode {
+                action.title_zh()
+            } else {
+                action.title_en()
+            },
+            ui.text,
+            fill,
+            1,
+        );
+
+        let (value, hint) = match action {
+            ProfileAction::Attack => (
+                format_u8(self.profile.base_attack),
+                if zh_mode {
+                    "基礎攻擊 +1"
+                } else {
+                    "BASE DMG +1"
+                },
+            ),
+            ProfileAction::Vitality => (
+                format_u8(self.profile.base_hp),
+                if zh_mode {
+                    "最大血量 +2"
+                } else {
+                    "MAX HP +2"
+                },
+            ),
+            ProfileAction::Trigger => (
+                format_u8(self.profile.base_fire_rate),
+                if zh_mode {
+                    "更快重新開火"
+                } else {
+                    "FASTER RE-FIRE"
+                },
+            ),
+            ProfileAction::Thrusters => (
+                format_u8(self.profile.base_move_speed),
+                if zh_mode {
+                    "移動速度更快"
+                } else {
+                    "MOVE SPEED +"
+                },
+            ),
+            ProfileAction::Deploy => unreachable!(),
+        };
+        display.text(x + 10, y + 22, hint, ui.text_muted, fill, 1);
+        display.fill_rect(x + w - 34, y + 8, 22, 18, color::mix(fill, accent, 24));
+        display.stroke_rect(x + w - 34, y + 8, 22, 18, 1, accent);
+        display.centered_text(
+            x + w - 23,
+            y + 12,
+            &value,
+            ui.text,
+            color::mix(fill, accent, 24),
+            1,
+        );
+    }
+
+    fn render_stage_select(&self, display: &mut Display, theme: ThemeMode, zh_mode: bool) {
+        let ui = palette(theme);
+        draw_gradient_background(display, theme, 84);
+        draw_shell_window(display, ui.cyan, &ui);
+        draw_title_bar(
+            display,
+            if zh_mode {
+                "選擇關卡"
+            } else {
+                "STAGE SELECT"
+            },
+            if zh_mode {
+                "5 關逐步解鎖 / boss 每 10 waves"
+            } else {
+                "5 stages / bosses every 10 waves"
+            },
+            ui.cyan,
+            &ui,
+        );
+        render_nav_back(display, zh_mode, ui.white, &ui);
+
+        draw_info_strip(
+            display,
+            20,
+            42,
+            132,
+            if zh_mode { "玩家等級" } else { "PLAYER LV" },
+            &format_u8(self.profile.player_level),
+            ui.amber,
+            &ui,
+        );
+        draw_info_strip(
+            display,
+            164,
+            42,
+            136,
+            if zh_mode { "已解鎖" } else { "UNLOCKED" },
+            &format_u8(self.profile.unlocked_stage),
+            ui.lime,
+            &ui,
+        );
+
+        for index in 0..STAGE_COUNT {
+            self.render_stage_card(
+                display,
+                index,
+                index == self.stage_select_index,
+                zh_mode,
+                &ui,
+            );
+        }
+
+        draw_footer_hint(
+            display,
+            if zh_mode {
+                "K0/WK 選關  K1 進入  BACK 返回角色頁"
+            } else {
+                "K0/WK SELECT  K1 DEPLOY  BACK TO PROFILE"
+            },
+            ui.cyan,
+            &ui,
+        );
+    }
+
+    fn render_stage_card(
+        &self,
+        display: &mut Display,
+        stage_index: usize,
+        selected: bool,
+        zh_mode: bool,
+        ui: &crate::display::Palette,
+    ) {
+        let stage = self.stage_def(stage_index);
+        let y = STAGE_CARD_Y + stage_index as u16 * (STAGE_CARD_H + STAGE_CARD_GAP);
+        let unlocked = self.is_stage_unlocked(stage_index);
+        let fill = if selected { ui.panel_alt } else { ui.panel };
+        let accent = if unlocked { ui.amber } else { ui.steel };
+        display.panel(STAGE_CARD_X, y, STAGE_CARD_W, STAGE_CARD_H, fill, accent);
+        display.text(
+            STAGE_CARD_X + 10,
+            y + 7,
+            if zh_mode {
+                stage.title_zh
+            } else {
+                stage.title_en
+            },
+            if unlocked { ui.text } else { ui.text_muted },
+            fill,
+            1,
+        );
+        display.text(
+            STAGE_CARD_X + 10,
+            y + 18,
+            if zh_mode {
+                stage.note_zh
+            } else {
+                stage.note_en
+            },
+            ui.text_muted,
+            fill,
+            1,
+        );
+
+        let right_x = STAGE_CARD_X + STAGE_CARD_W - 68;
+        if unlocked {
+            let mut badge: String<20> = String::new();
+            let _ = write!(
+                &mut badge,
+                "W{} C{}",
+                self.stage_best_wave(stage_index),
+                self.stage_clear_count(stage_index)
+            );
+            display.text(right_x, y + 7, &badge, ui.text, fill, 1);
+            display.text(
+                right_x,
+                y + 18,
+                &format_u16(self.stage_best_kills(stage_index)),
+                ui.text_muted,
+                fill,
+                1,
+            );
+        } else {
+            display.fill_rect(right_x, y + 7, 46, 12, color::mix(fill, ui.shadow, 40));
+            display.stroke_rect(right_x, y + 7, 46, 12, 1, ui.steel);
+            display.centered_text(
+                right_x + 23,
+                y + 10,
+                "LOCK",
+                ui.text_muted,
+                color::mix(fill, ui.shadow, 40),
+                1,
+            );
+        }
+    }
+
+    fn render_result(&self, display: &mut Display, theme: ThemeMode, zh_mode: bool) {
+        let ui = palette(theme);
+        let cleared = self.state == BattleState::StageClear;
+        let accent = if cleared { ui.lime } else { ui.rose };
+        draw_gradient_background(display, theme, 106);
+        draw_shell_window(display, accent, &ui);
+        draw_title_bar(
+            display,
+            if cleared {
+                if zh_mode {
+                    "關卡完成"
+                } else {
+                    "MISSION CLEAR"
+                }
+            } else if zh_mode {
+                "獵手倒下"
+            } else {
+                "SYSTEM FAIL"
+            },
+            if cleared {
+                if zh_mode {
+                    "永久成長已記錄"
+                } else {
+                    "permanent growth recorded"
+                }
+            } else if zh_mode {
+                "這一局已結算，可立即重試"
+            } else {
+                "run ended / retry or return"
+            },
+            accent,
+            &ui,
+        );
+        render_nav_back(display, zh_mode, ui.white, &ui);
+
+        draw_info_strip(
+            display,
+            20,
+            44,
+            132,
+            if zh_mode { "關卡" } else { "STAGE" },
+            &format_u8(self.result_summary.stage),
+            accent,
+            &ui,
+        );
+        draw_info_strip(
+            display,
+            164,
+            44,
+            136,
+            if zh_mode { "波次" } else { "WAVE" },
+            &format_u8(self.result_summary.wave_reached),
+            ui.cyan,
+            &ui,
+        );
+
+        display.panel(24, 72, 272, 92, ui.panel, accent);
+        display.text(
+            36,
+            84,
+            if zh_mode { "本局擊殺" } else { "RUN KILLS" },
+            ui.text_muted,
+            ui.panel,
+            1,
+        );
+        display.text(
+            140,
+            84,
+            &format_u16(self.result_summary.kills),
+            ui.text,
+            ui.panel,
+            1,
+        );
+        display.text(
+            36,
+            100,
+            if zh_mode { "永久經驗" } else { "PERMA XP" },
+            ui.text_muted,
+            ui.panel,
+            1,
+        );
+        display.text(
+            140,
+            100,
+            &format_u16(self.result_summary.xp_gain),
+            ui.text,
+            ui.panel,
+            1,
+        );
+        display.text(
+            36,
+            116,
+            if zh_mode {
+                "升級成長"
+            } else {
+                "LEVEL GAIN"
+            },
+            ui.text_muted,
+            ui.panel,
+            1,
+        );
+        display.text(
+            140,
+            116,
+            &format_u8(self.result_summary.level_gained),
+            ui.text,
+            ui.panel,
+            1,
+        );
+        display.text(
+            36,
+            132,
+            if zh_mode {
+                "升級點數"
+            } else {
+                "UPGRADE PTS"
+            },
+            ui.text_muted,
+            ui.panel,
+            1,
+        );
+        display.text(
+            140,
+            132,
+            &format_u8(self.result_summary.upgrade_points_gain),
+            ui.text,
+            ui.panel,
+            1,
+        );
+        if let Some(unlocked) = self.result_summary.unlocked_stage {
+            let mut unlock_text: String<24> = String::new();
+            let _ = write!(
+                &mut unlock_text,
+                "{} {}",
+                if zh_mode { "解鎖關卡" } else { "UNLOCKED" },
+                unlocked
+            );
+            display.text(36, 148, &unlock_text, accent, ui.panel, 1);
+        }
+
+        let labels = if cleared {
+            (
+                if zh_mode { "角色頁" } else { "PROFILE" },
+                if zh_mode { "關卡列表" } else { "STAGES" },
+            )
+        } else {
+            (
+                if zh_mode { "再試一次" } else { "RETRY" },
+                if zh_mode { "回角色頁" } else { "PROFILE" },
+            )
+        };
+        for index in 0..2 {
+            let y = RESULT_BUTTON_Y + index as u16 * (RESULT_BUTTON_H + RESULT_BUTTON_GAP);
+            let selected = self.result_choice == index;
+            let fill = if selected { ui.panel_alt } else { ui.panel };
+            let border = if selected { accent } else { ui.steel };
+            display.panel(
+                RESULT_BUTTON_X,
+                y,
+                RESULT_BUTTON_W,
+                RESULT_BUTTON_H,
+                fill,
+                border,
+            );
+            display.centered_text(
+                RESULT_BUTTON_X + RESULT_BUTTON_W / 2,
+                y + 5,
+                if index == 0 { labels.0 } else { labels.1 },
+                ui.text,
+                fill,
+                1,
+            );
+        }
+    }
+
+    fn render_battle(&mut self, display: &mut Display, theme: ThemeMode, zh_mode: bool) {
+        let ui = palette(theme);
+        draw_gradient_background(display, theme, 104);
+
+        self.render_header(display, zh_mode, &ui);
+        self.render_arena_region(display, zh_mode, &ui);
+        self.render_panel_region(display, zh_mode, &ui);
+
+        if self.state == BattleState::BossReward {
+            self.render_reward_overlay(display, zh_mode, &ui);
+            self.render_footer(display, zh_mode, &ui);
+        }
+    }
+
+    fn render_header(&self, display: &mut Display, zh_mode: bool, ui: &crate::display::Palette) {
+        display.panel(12, 8, 176, 24, ui.panel, ui.amber);
+        render_nav_back(display, zh_mode, ui.white, ui);
+        display.text(
+            84,
+            16,
+            if zh_mode {
+                "定點獵手"
+            } else {
+                "STATION HUNTER"
+            },
+            ui.text,
+            ui.panel,
+            1,
+        );
+
+        let chip_accent = match self.wave_tracker.kind {
+            WaveKind::Standard => ui.cyan,
+            WaveKind::Pressure => ui.orange,
+            WaveKind::Elite => ui.amber,
+            WaveKind::Boss => ui.rose,
+        };
+        let chip_label = match (zh_mode, self.wave_tracker.kind) {
+            (true, WaveKind::Standard) => "普",
+            (true, WaveKind::Pressure) => "壓",
+            (true, WaveKind::Elite) => "菁",
+            (true, WaveKind::Boss) => "B",
+            (false, WaveKind::Standard) => "STD",
+            (false, WaveKind::Pressure) => "PRS",
+            (false, WaveKind::Elite) => "ELT",
+            (false, WaveKind::Boss) => "BOSS",
+        };
+        let mut stage_text: String<18> = String::new();
+        let _ = write!(
+            &mut stage_text,
+            "S{} W{}",
+            self.current_stage, self.wave_tracker.wave
+        );
+        display.panel(196, 8, 112, 24, ui.panel, chip_accent);
+        display.text(204, 16, &stage_text, ui.text, ui.panel, 1);
+        display.fill_rect(264, 12, 34, 12, color::mix(ui.panel_alt, chip_accent, 28));
+        display.stroke_rect(264, 12, 34, 12, 1, chip_accent);
+        display.centered_text(
+            281,
+            15,
+            chip_label,
+            ui.text,
+            color::mix(ui.panel_alt, chip_accent, 28),
+            1,
+        );
+    }
+
+    fn render_footer(&self, display: &mut Display, zh_mode: bool, ui: &crate::display::Palette) {
+        draw_footer_hint(
+            display,
+            if zh_mode {
+                "K0/WK 選擇  K1 確認  點卡片也可"
+            } else {
+                "K0/WK PICK  K1 CONFIRM  OR TAP A CARD"
+            },
+            ui.amber,
+            ui,
+        );
+    }
+
+    fn render_arena_region(
+        &mut self,
+        display: &mut Display,
+        zh_mode: bool,
+        ui: &crate::display::Palette,
+    ) {
         display.panel(ARENA_X, ARENA_Y, ARENA_W, ARENA_H, ui.panel, ui.cyan);
-        self.render_arena_background(display, &ui);
-        self.render_arena_dynamic(display, &ui);
+        self.render_arena_background(display, ui);
+        self.render_arena_dynamic(display, zh_mode, ui);
         self.last_arena_frame = self.capture_arena_frame();
-        self.arena_frame_valid = matches!(self.state, BattleState::Running);
+        self.arena_frame_valid = self.state == BattleState::Running;
     }
 
     fn render_panel_region(
@@ -108,25 +717,17 @@ impl AutoBattleApp {
         zh_mode: bool,
         ui: &crate::display::Palette,
     ) {
-        self.render_panel(display, zh_mode, &ui);
+        self.render_panel(display, zh_mode, ui);
     }
 
-    fn render_overlay_region(
-        &self,
+    fn render_running_arena(
+        &mut self,
         display: &mut Display,
         zh_mode: bool,
         ui: &crate::display::Palette,
     ) {
-        if self.state == BattleState::LevelUp {
-            self.render_level_up_overlay(display, zh_mode, ui);
-        } else if !matches!(self.state, BattleState::Running) {
-            self.render_overlay(display, zh_mode, ui);
-        }
-    }
-
-    fn render_running_arena(&mut self, display: &mut Display, ui: &crate::display::Palette) {
-        if !matches!(self.state, BattleState::Running) || !self.arena_frame_valid {
-            self.render_arena_region(display, ui);
+        if self.state != BattleState::Running || !self.arena_frame_valid {
+            self.render_arena_region(display, zh_mode, ui);
             return;
         }
 
@@ -138,7 +739,7 @@ impl AutoBattleApp {
         for rect in dirty.as_slice() {
             self.render_arena_background_rect(display, ui, *rect);
         }
-        self.render_arena_dynamic(display, ui);
+        self.render_arena_dynamic(display, zh_mode, ui);
         self.last_arena_frame = current;
         self.arena_frame_valid = true;
     }
@@ -233,7 +834,12 @@ impl AutoBattleApp {
         }
     }
 
-    fn render_arena_dynamic(&self, display: &mut Display, ui: &crate::display::Palette) {
+    fn render_arena_dynamic(
+        &self,
+        display: &mut Display,
+        zh_mode: bool,
+        ui: &crate::display::Palette,
+    ) {
         if self.moving {
             let tx = ARENA_X + self.target_x as u16;
             let ty = ARENA_Y + self.target_y as u16;
@@ -312,6 +918,10 @@ impl AutoBattleApp {
                 EnemyKind::Summoner => {
                     color::mix(ui.indigo, ui.lime, ((enemy.phase >> 4) & 0x1F) as u8)
                 }
+                EnemyKind::BossRam => color::mix(ui.rose, ui.orange, 120),
+                EnemyKind::BossBurst => color::mix(ui.indigo, ui.white, 84),
+                EnemyKind::BossNest => color::mix(ui.lime, ui.indigo, 84),
+                EnemyKind::BossRing => color::mix(ui.cyan, ui.amber, 92),
             };
             let fill = if enemy.flash_ms > 0 {
                 color::mix(base_fill, ui.white, 170)
@@ -331,14 +941,13 @@ impl AutoBattleApp {
                 size as u16,
                 size as u16,
                 1,
-                match enemy.kind {
-                    EnemyKind::Runner => ui.white,
-                    EnemyKind::Shooter => ui.cyan,
-                    EnemyKind::Bruiser => ui.orange,
-                    EnemyKind::Dasher => ui.white,
-                    EnemyKind::Summoner => ui.lime,
+                if enemy.kind.is_boss() {
+                    ui.white
+                } else {
+                    ui.text
                 },
             );
+
             match enemy.kind {
                 EnemyKind::Runner => {
                     display.fill_rect(
@@ -406,6 +1015,64 @@ impl AutoBattleApp {
                         ui.lime,
                     );
                 }
+                EnemyKind::BossRam => {
+                    display.fill_rect(
+                        ex.saturating_sub(6) as u16,
+                        ey.saturating_sub(2) as u16,
+                        12,
+                        4,
+                        ui.white,
+                    );
+                }
+                EnemyKind::BossBurst => {
+                    display.fill_rect(
+                        ex.saturating_sub(1) as u16,
+                        ey.saturating_sub(7) as u16,
+                        2,
+                        14,
+                        ui.white,
+                    );
+                    display.fill_rect(
+                        ex.saturating_sub(7) as u16,
+                        ey.saturating_sub(1) as u16,
+                        14,
+                        2,
+                        ui.cyan,
+                    );
+                }
+                EnemyKind::BossNest => {
+                    display.fill_rect(
+                        ex.saturating_sub(5) as u16,
+                        ey.saturating_sub(5) as u16,
+                        10,
+                        10,
+                        ui.lime,
+                    );
+                    display.fill_rect(
+                        ex.saturating_sub(2) as u16,
+                        ey.saturating_sub(2) as u16,
+                        4,
+                        4,
+                        ui.indigo,
+                    );
+                }
+                EnemyKind::BossRing => {
+                    display.stroke_rect(
+                        ex.saturating_sub(7) as u16,
+                        ey.saturating_sub(7) as u16,
+                        14,
+                        14,
+                        1,
+                        ui.white,
+                    );
+                    display.fill_rect(
+                        ex.saturating_sub(2) as u16,
+                        ey.saturating_sub(2) as u16,
+                        4,
+                        4,
+                        ui.amber,
+                    );
+                }
             }
 
             let hp_w =
@@ -423,6 +1090,45 @@ impl AutoBattleApp {
                 hp_w,
                 2,
                 color::mix(ui.rose, ui.white, 88),
+            );
+        }
+
+        for pickup in &self.pickups {
+            if !pickup.active {
+                continue;
+            }
+            let px = ARENA_X as i16 + pickup.x as i16;
+            let py = ARENA_Y as i16 + pickup.y as i16;
+            let size = pickup.size as i16;
+            let fill = color::mix(ui.lime, ui.white, 92);
+            display.fill_rect(
+                px.saturating_sub(size / 2) as u16,
+                py.saturating_sub(size / 2) as u16,
+                size as u16,
+                size as u16,
+                fill,
+            );
+            display.stroke_rect(
+                px.saturating_sub(size / 2) as u16,
+                py.saturating_sub(size / 2) as u16,
+                size as u16,
+                size as u16,
+                1,
+                ui.white,
+            );
+            display.fill_rect(
+                px.saturating_sub(1) as u16,
+                py.saturating_sub(4) as u16,
+                2,
+                8,
+                ui.white,
+            );
+            display.fill_rect(
+                px.saturating_sub(4) as u16,
+                py.saturating_sub(1) as u16,
+                8,
+                2,
+                ui.white,
             );
         }
 
@@ -459,6 +1165,73 @@ impl AutoBattleApp {
 
         let px = ARENA_X as i16 + self.player_x as i16;
         let py = ARENA_Y as i16 + self.player_y as i16;
+        if self.weapon_flash_ms > 0 {
+            let flash = color::mix(ui.amber, ui.white, 140);
+            display.fill_rect(
+                px.saturating_sub(16) as u16,
+                py.saturating_sub(1) as u16,
+                5,
+                2,
+                flash,
+            );
+            display.fill_rect(
+                px.saturating_add(11) as u16,
+                py.saturating_sub(1) as u16,
+                5,
+                2,
+                flash,
+            );
+            display.fill_rect(
+                px.saturating_sub(1) as u16,
+                py.saturating_sub(16) as u16,
+                2,
+                5,
+                flash,
+            );
+            display.fill_rect(
+                px.saturating_sub(1) as u16,
+                py.saturating_add(11) as u16,
+                2,
+                5,
+                flash,
+            );
+        }
+        if self.heal_flash_ms > 0 {
+            let heal = color::mix(ui.lime, ui.white, 140);
+            display.stroke_rect(
+                px.saturating_sub(12) as u16,
+                py.saturating_sub(12) as u16,
+                24,
+                24,
+                1,
+                heal,
+            );
+            display.fill_rect(
+                px.saturating_sub(1) as u16,
+                py.saturating_sub(13) as u16,
+                2,
+                6,
+                heal,
+            );
+            display.fill_rect(
+                px.saturating_sub(1) as u16,
+                py.saturating_add(8) as u16,
+                2,
+                6,
+                heal,
+            );
+        }
+        if self.damage_flash_ms > 0 {
+            let warn = color::mix(ui.rose, ui.white, 104);
+            display.stroke_rect(
+                px.saturating_sub(14) as u16,
+                py.saturating_sub(14) as u16,
+                28,
+                28,
+                1,
+                warn,
+            );
+        }
         let player_fill = if self.hit_invuln_ms > 0 {
             color::mix(ui.cyan, ui.white, 156)
         } else {
@@ -518,79 +1291,13 @@ impl AutoBattleApp {
                 ui.amber,
             );
         }
+
+        if self.banner_active() {
+            self.render_wave_banner(display, zh_mode, ui);
+        }
     }
 
-    fn render_overlay(&self, display: &mut Display, zh_mode: bool, ui: &crate::display::Palette) {
-        let (title, subtitle, accent, action) = match self.state {
-            BattleState::Ready => (
-                if zh_mode { "準備開始" } else { "READY" },
-                if zh_mode {
-                    "進場後先閃躲，停下來就會自動射擊"
-                } else {
-                    "DODGE FIRST, THEN STOP TO AUTO-FIRE"
-                },
-                ui.amber,
-                if zh_mode { "開始" } else { "START" },
-            ),
-            BattleState::Victory => (
-                if zh_mode { "清場完成" } else { "CLEAR" },
-                if zh_mode {
-                    "你撐住了，按下重新開始再打一次"
-                } else {
-                    "YOU SURVIVED THE WAVE. PLAY AGAIN?"
-                },
-                ui.lime,
-                if zh_mode { "再來一局" } else { "REPLAY" },
-            ),
-            BattleState::Defeat => (
-                if zh_mode { "獵手倒下" } else { "TRY AGAIN" },
-                if zh_mode {
-                    "下一次先拉開距離再停下來射"
-                } else {
-                    "CREATE SPACE, THEN PLANT AND FIRE"
-                },
-                ui.rose,
-                if zh_mode { "重試" } else { "RETRY" },
-            ),
-            BattleState::Running | BattleState::LevelUp => return,
-        };
-
-        let mut best_text: String<24> = String::new();
-        let _ = write!(
-            &mut best_text,
-            "{} {}",
-            if zh_mode {
-                "最佳擊殺"
-            } else {
-                "BEST KILLS"
-            },
-            self.best_kills
-        );
-
-        display.fill_rect(34, 90, 252, 86, color::mix(ui.shadow, accent, 26));
-        display.panel(42, 82, 236, 86, ui.panel_alt, accent);
-        display.centered_text(160, 98, title, ui.text, ui.panel_alt, 2);
-        display.centered_text(160, 122, subtitle, ui.text_muted, ui.panel_alt, 1);
-        display.centered_text(160, 142, &best_text, ui.text_muted, ui.panel_alt, 1);
-        display.panel(
-            OVERLAY_ACTION_X,
-            OVERLAY_ACTION_Y,
-            OVERLAY_ACTION_W,
-            OVERLAY_ACTION_H,
-            ui.panel,
-            accent,
-        );
-        display.centered_text(
-            OVERLAY_ACTION_X + OVERLAY_ACTION_W / 2,
-            OVERLAY_ACTION_Y + 6,
-            action,
-            ui.text,
-            ui.panel,
-            1,
-        );
-    }
-
-    fn render_level_up_overlay(
+    fn render_reward_overlay(
         &self,
         display: &mut Display,
         zh_mode: bool,
@@ -601,7 +1308,17 @@ impl AutoBattleApp {
         display.centered_text(
             160,
             66,
-            if zh_mode { "升級選擇" } else { "LEVEL UP" },
+            if self.wave_tracker.wave % BOSS_INTERVAL == 0 {
+                if zh_mode {
+                    "Boss 核心獎勵"
+                } else {
+                    "BOSS CORE REWARD"
+                }
+            } else if zh_mode {
+                "Wave 升級"
+            } else {
+                "WAVE UPGRADE"
+            },
             ui.text,
             ui.panel_alt,
             2,
@@ -610,9 +1327,9 @@ impl AutoBattleApp {
             160,
             82,
             if zh_mode {
-                "從三個 buff 中選一個"
+                "選一個 buff，下一波會放一個醫療包"
             } else {
-                "PICK ONE RANDOM BUFF"
+                "PICK A BUFF, NEXT WAVE GETS A MED KIT"
             },
             ui.text_muted,
             ui.panel_alt,
@@ -620,7 +1337,7 @@ impl AutoBattleApp {
         );
 
         for index in 0..LEVEL_UP_CHOICES {
-            let buff = self.level_up_choices[index];
+            let buff = self.reward_choices[index];
             let y = BUFF_Y + index as u16 * (BUFF_H + BUFF_GAP);
             let selected = self.selected_choice == index;
             let accent = buff.accent(ui);
@@ -667,59 +1384,250 @@ impl AutoBattleApp {
         );
         display.panel(PANEL_X, PANEL_Y, PANEL_W, PANEL_H, shell, ui.cyan);
 
-        let hp_bar_w = PANEL_W - 28;
-        let hp_fill = ((self.health.max(0) as u16 * hp_bar_w) / self.max_health.max(1) as u16)
-            .max(1)
-            .min(hp_bar_w);
-        let progress_goal = self.next_level_kills.min(TARGET_KILLS);
-        let progress_start = progress_goal.saturating_sub(KILLS_PER_LEVEL);
-        let progress_now = self.kills.saturating_sub(progress_start);
-        let progress_cap = progress_goal.saturating_sub(progress_start).max(1);
-        let xp_fill = ((progress_now as u32 * hp_bar_w as u32) / progress_cap as u32) as u16;
-
-        let mut top_text: String<24> = String::new();
+        let hp_bar_w = PANEL_W - 16;
+        let wave_fill =
+            ((self.wave_tracker.wave as u32 * hp_bar_w as u32) / WAVES_PER_STAGE as u32) as u16;
+        let wave_accent = match self.wave_tracker.kind {
+            WaveKind::Standard => ui.cyan,
+            WaveKind::Pressure => ui.orange,
+            WaveKind::Elite => ui.amber,
+            WaveKind::Boss => ui.rose,
+        };
+        let wave_chip = match (zh_mode, self.wave_tracker.kind) {
+            (true, WaveKind::Standard) => "一般",
+            (true, WaveKind::Pressure) => "壓力",
+            (true, WaveKind::Elite) => "精英",
+            (true, WaveKind::Boss) => "BOSS",
+            (false, WaveKind::Standard) => "STD",
+            (false, WaveKind::Pressure) => "PRESS",
+            (false, WaveKind::Elite) => "ELITE",
+            (false, WaveKind::Boss) => "BOSS",
+        };
+        let mut hp_text: String<16> = String::new();
         let _ = write!(
-            &mut top_text,
-            "LV{}  {}/{}",
-            self.level, self.kills, TARGET_KILLS
+            &mut hp_text,
+            "{}/{}",
+            self.health.max(0),
+            self.max_health.max(1)
         );
-        let mut best_text: String<16> = String::new();
-        let _ = write!(&mut best_text, "B{}", self.best_kills);
-        display.text(PANEL_X + 8, PANEL_Y + 6, &top_text, ui.text, shell, 1);
-        display.text(
-            PANEL_X + 74,
-            PANEL_Y + 6,
-            &best_text,
-            ui.text_muted,
-            shell,
-            1,
-        );
+        let mut kills_text: String<16> = String::new();
+        let _ = write!(&mut kills_text, "K {}", self.kills);
+
+        display.panel(PANEL_X + 8, PANEL_Y + 6, 52, 12, shell, ui.lime);
+        display.text(PANEL_X + 12, PANEL_Y + 9, "HP", ui.text_muted, shell, 1);
+        display.text(PANEL_X + 28, PANEL_Y + 9, &hp_text, ui.text, shell, 1);
+        display.panel(PANEL_X + 66, PANEL_Y + 6, 50, 12, shell, ui.cyan);
+        display.text(PANEL_X + 72, PANEL_Y + 9, &kills_text, ui.text, shell, 1);
+
         display.text(
             PANEL_X + 8,
-            PANEL_Y + 18,
-            if zh_mode { "血量" } else { "HP" },
+            PANEL_Y + 22,
+            if self.wave_tracker.kind == WaveKind::Boss {
+                if zh_mode {
+                    "Boss 核心"
+                } else {
+                    "BOSS CORE"
+                }
+            } else if zh_mode {
+                "波次進度"
+            } else {
+                "WAVE FLOW"
+            },
             ui.text_muted,
             shell,
             1,
         );
-        display.fill_rect(PANEL_X + 24, PANEL_Y + 18, hp_bar_w, 4, ui.shadow);
+        display.fill_rect(PANEL_X + 8, PANEL_Y + 31, hp_bar_w, 5, ui.shadow);
         display.fill_rect(
-            PANEL_X + 24,
-            PANEL_Y + 18,
-            hp_fill,
-            4,
-            if self.health <= 2 { ui.rose } else { ui.lime },
+            PANEL_X + 8,
+            PANEL_Y + 31,
+            if self.wave_tracker.kind == WaveKind::Boss {
+                if let Some((boss_hp, boss_max_hp)) = self.active_boss_stats() {
+                    ((boss_hp.max(0) as u16 * hp_bar_w) / boss_max_hp.max(1) as u16)
+                        .max(1)
+                        .min(hp_bar_w)
+                } else {
+                    1
+                }
+            } else {
+                wave_fill.max(1)
+            },
+            5,
+            if self.wave_tracker.kind == WaveKind::Boss {
+                ui.rose
+            } else {
+                ui.amber
+            },
         );
+        display.fill_rect(
+            PANEL_X + 8,
+            PANEL_Y + 41,
+            42,
+            11,
+            color::mix(shell, wave_accent, 20),
+        );
+        display.stroke_rect(PANEL_X + 8, PANEL_Y + 41, 42, 11, 1, wave_accent);
+        display.centered_text(
+            PANEL_X + 29,
+            PANEL_Y + 44,
+            wave_chip,
+            ui.text,
+            color::mix(shell, wave_accent, 20),
+            1,
+        );
+
+        if self.pickups.iter().any(|pickup| pickup.active) {
+            display.fill_rect(
+                PANEL_X + 54,
+                PANEL_Y + 41,
+                28,
+                11,
+                color::mix(shell, ui.lime, 20),
+            );
+            display.stroke_rect(PANEL_X + 54, PANEL_Y + 41, 28, 11, 1, ui.lime);
+            display.centered_text(
+                PANEL_X + 68,
+                PANEL_Y + 44,
+                "MED",
+                ui.text,
+                color::mix(shell, ui.lime, 20),
+                1,
+            );
+        }
+
+        let mut status_text: String<24> = String::new();
+        if self.wave_tracker.kind == WaveKind::Boss {
+            let _ = write!(
+                &mut status_text,
+                "{} {}",
+                if zh_mode { "目標" } else { "TARGET" },
+                format_u8(self.wave_tracker.remaining_to_kill)
+            );
+        } else {
+            let _ = write!(
+                &mut status_text,
+                "{} {}",
+                if zh_mode { "剩餘" } else { "LEFT" },
+                format_u8(self.wave_tracker.remaining_to_kill)
+            );
+        }
+        display.text(PANEL_X + 86, PANEL_Y + 44, &status_text, ui.text, shell, 1);
+
         display.text(
             PANEL_X + 8,
-            PANEL_Y + 28,
-            if zh_mode { "經驗" } else { "XP" },
+            PANEL_Y + 54,
+            if self.moving {
+                if zh_mode {
+                    "移動中 / 停下開火"
+                } else {
+                    "MOVE = NO FIRE"
+                }
+            } else if self.wave_tracker.kind == WaveKind::Boss {
+                if let Some(kind) = self.active_boss_kind() {
+                    if zh_mode {
+                        kind.title_zh()
+                    } else {
+                        kind.title_en()
+                    }
+                } else if zh_mode {
+                    "Boss 進場中"
+                } else {
+                    "BOSS INBOUND"
+                }
+            } else if zh_mode {
+                "站穩輸出"
+            } else {
+                "HOLD POSITION"
+            },
             ui.text_muted,
             shell,
             1,
         );
-        display.fill_rect(PANEL_X + 24, PANEL_Y + 28, hp_bar_w, 4, ui.shadow);
-        display.fill_rect(PANEL_X + 24, PANEL_Y + 28, xp_fill.max(1), 4, ui.amber);
+    }
+
+    fn render_wave_banner(
+        &self,
+        display: &mut Display,
+        zh_mode: bool,
+        ui: &crate::display::Palette,
+    ) {
+        let accent = if self.wave_tracker.kind == WaveKind::Boss {
+            ui.rose
+        } else {
+            match self.wave_tracker.kind {
+                WaveKind::Standard => ui.cyan,
+                WaveKind::Pressure => ui.orange,
+                WaveKind::Elite => ui.amber,
+                WaveKind::Boss => ui.rose,
+            }
+        };
+        let fill = color::mix(ui.panel_alt, accent, 18);
+        let title_y = ARENA_Y + 16;
+        let subtitle_y = ARENA_Y + 28;
+        display.fill_rect(
+            ARENA_X + 14,
+            ARENA_Y + 10,
+            156,
+            30,
+            color::mix(ui.shadow, accent, 12),
+        );
+        display.panel(ARENA_X + 18, ARENA_Y + 12, 148, 24, fill, accent);
+
+        let title = if self.wave_tracker.kind == WaveKind::Boss {
+            if zh_mode {
+                "Boss 波"
+            } else {
+                "BOSS WAVE"
+            }
+        } else {
+            if zh_mode {
+                "下一波開始"
+            } else {
+                "WAVE START"
+            }
+        };
+        let subtitle = if self.wave_tracker.kind == WaveKind::Boss {
+            if let Some(kind) = self.active_boss_kind() {
+                if zh_mode {
+                    kind.title_zh()
+                } else {
+                    kind.title_en()
+                }
+            } else {
+                if zh_mode {
+                    "核心入場"
+                } else {
+                    "CORE INBOUND"
+                }
+            }
+        } else {
+            if zh_mode {
+                self.wave_tracker.kind.title_zh()
+            } else {
+                self.wave_tracker.kind.title_en()
+            }
+        };
+        display.text(ARENA_X + 28, title_y, title, ui.text, fill, 1);
+        display.text(ARENA_X + 28, subtitle_y, subtitle, ui.text_muted, fill, 1);
+
+        let mut wave_text: String<12> = String::new();
+        let _ = write!(&mut wave_text, "W{}", self.wave_tracker.wave);
+        display.fill_rect(
+            ARENA_X + 128,
+            ARENA_Y + 17,
+            28,
+            12,
+            color::mix(fill, accent, 24),
+        );
+        display.stroke_rect(ARENA_X + 128, ARENA_Y + 17, 28, 12, 1, accent);
+        display.centered_text(
+            ARENA_X + 142,
+            ARENA_Y + 20,
+            &wave_text,
+            ui.text,
+            color::mix(fill, accent, 24),
+            1,
+        );
     }
 }
 
@@ -737,4 +1645,16 @@ impl BuffKind {
             Self::GuardShell => ui.lime,
         }
     }
+}
+
+fn format_u8(value: u8) -> String<8> {
+    let mut out = String::<8>::new();
+    let _ = write!(&mut out, "{}", value);
+    out
+}
+
+fn format_u16(value: u16) -> String<12> {
+    let mut out = String::<12>::new();
+    let _ = write!(&mut out, "{}", value);
+    out
 }

@@ -12,8 +12,9 @@ pub use render::boot_sequence;
 use crate::app_registry::{self, home_apps, AppId};
 use crate::apps::{
     AlbumAction, AlbumApp, AlbumRedraw, AlbumState, AutoBattleAction, AutoBattleApp,
-    AutoBattleRedraw, GameCenterAction, GameCenterApp, PaintAction, PaintApp, PaintRedraw,
-    PaintState, TapRushAction, TapRushApp,
+    AutoBattleRedraw, GameCenterAction, GameCenterApp, GraphicsLabAction, GraphicsLabApp,
+    PaintAction, PaintApp, PaintRedraw, PaintState, PseudoRacerAction, PseudoRacerApp,
+    TapRushAction, TapRushApp,
 };
 use crate::board::{delay_ms, millis, Board, ButtonSnapshot};
 use crate::display::{color, palette, Display, ThemeMode, SCREEN_WIDTH};
@@ -21,10 +22,12 @@ use crate::dungeon::{DungeonAction, DungeonApp, RenderStrategy};
 use crate::storage::{self, PersistedAppData, PersistedState, PersistedSystemSettings};
 use crate::touch::{Touch, TouchCalibration, TouchState};
 use crate::ui::{
-    render_about, render_control_room, render_diagnostics, render_home, render_map_select,
-    render_safe_mode, render_settings, render_touch_calibration, DiagnosticsNotice,
-    DIAG_ACTION_COUNT, DIAG_ACTION_H, DIAG_ACTION_W, DIAG_ACTION_Y, DIAG_CLEAR_X, DIAG_RESET_X,
-    NAV_BACK_H, NAV_BACK_W, NAV_BACK_X, NAV_BACK_Y,
+    desktop_icon_rect, render_about, render_control_room, render_diagnostics, render_home,
+    render_map_select, render_safe_mode, render_settings, render_touch_calibration,
+    settings_item_at_point, settings_list_contains, settings_max_scroll_top,
+    settings_visual_row_for_item, DiagnosticsNotice, DIAG_ACTION_COUNT, DIAG_ACTION_H,
+    DIAG_ACTION_W, DIAG_ACTION_Y, DIAG_CLEAR_X, DIAG_RESET_X, NAV_BACK_H, NAV_BACK_W, NAV_BACK_X,
+    NAV_BACK_Y, SETTINGS_ROW_HEIGHT, SETTINGS_VISIBLE_ROWS,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -43,6 +46,8 @@ enum Screen {
     AutoBattle,
     Paint,
     TapRush,
+    PseudoRacer,
+    GraphicsLab,
 }
 
 impl Screen {
@@ -59,9 +64,11 @@ impl Screen {
             (Self::TouchCalibrate, true) => "觸控校正",
             (Self::ControlRoom, true) => "控制室",
             (Self::DungeonCore, true) => "地城核心",
-            (Self::AutoBattle, true) => "自動獵手",
+            (Self::AutoBattle, true) => "定點獵手",
             (Self::Paint, true) => "像素畫板",
             (Self::TapRush, true) => "Tap Rush",
+            (Self::PseudoRacer, true) => "假 3D 賽車",
+            (Self::GraphicsLab, true) => "圖學實驗室",
             (Self::Home, false) => "HOME",
             (Self::Album, false) => "ALBUM",
             (Self::GameCenter, false) => "GAME CENTER",
@@ -73,9 +80,11 @@ impl Screen {
             (Self::TouchCalibrate, false) => "TOUCH CALIBRATION",
             (Self::ControlRoom, false) => "CONTROL ROOM",
             (Self::DungeonCore, false) => "DUNGEON CORE",
-            (Self::AutoBattle, false) => "AUTO HUNTER",
+            (Self::AutoBattle, false) => "STATION HUNTER",
             (Self::Paint, false) => "PIXEL PAINT",
             (Self::TapRush, false) => "TAP RUSH",
+            (Self::PseudoRacer, false) => "PSEUDO RACER",
+            (Self::GraphicsLab, false) => "GRAPHICS LAB",
         }
     }
 }
@@ -105,6 +114,10 @@ pub struct MiniOs {
     screen: Screen,
     home_index: usize,
     settings_index: usize,
+    settings_scroll_top_row: usize,
+    settings_drag_anchor_y: u16,
+    settings_drag_origin_row: usize,
+    settings_drag_active: bool,
     map_index: usize,
     dungeon: DungeonApp,
     album: AlbumApp,
@@ -112,6 +125,8 @@ pub struct MiniOs {
     auto_battle: AutoBattleApp,
     paint: PaintApp,
     tap_rush: TapRushApp,
+    pseudo_racer: PseudoRacerApp,
+    graphics_lab: GraphicsLabApp,
     theme: ThemeMode,
     language: Language,
     render_strategy: RenderStrategy,
@@ -142,6 +157,10 @@ impl MiniOs {
             screen: Screen::TouchCalibrate,
             home_index: 0,
             settings_index: 0,
+            settings_scroll_top_row: 0,
+            settings_drag_anchor_y: 0,
+            settings_drag_origin_row: 0,
+            settings_drag_active: false,
             map_index: 0,
             dungeon: DungeonApp::new(),
             album: AlbumApp::new(),
@@ -149,6 +168,8 @@ impl MiniOs {
             auto_battle: AutoBattleApp::new(),
             paint: PaintApp::new(),
             tap_rush: TapRushApp::new(),
+            pseudo_racer: PseudoRacerApp::new(),
+            graphics_lab: GraphicsLabApp::new(),
             theme: ThemeMode::Dark,
             language: Language::English,
             render_strategy: RenderStrategy::Balanced,
@@ -180,5 +201,9 @@ impl MiniOs {
         self.diagnostics_return_screen = Screen::SafeMode;
         self.screen = Screen::SafeMode;
         self.force_full_redraw = true;
+    }
+
+    pub fn touch_ready(&self) -> bool {
+        self.touch_ready
     }
 }

@@ -66,6 +66,8 @@ pub mod storage {
     use crate::touch::TouchCalibration;
 
     pub const PAINT_STORAGE_BYTES: usize = 24 * 20;
+    pub const PSEUDO_RACER_TRACK_COUNT: usize = 3;
+    pub const STATION_HUNTER_STAGE_COUNT: usize = 5;
 
     #[derive(Clone, Copy, PartialEq, Debug)]
     pub struct PersistedSystemSettings {
@@ -77,6 +79,29 @@ pub mod storage {
     }
 
     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    pub struct PersistedStationHunterData {
+        pub selected_stage: u8,
+        pub player_level: u8,
+        pub player_xp: u16,
+        pub upgrade_points: u8,
+        pub unlocked_stage: u8,
+        pub base_attack: u8,
+        pub base_hp: u8,
+        pub base_fire_rate: u8,
+        pub base_move_speed: u8,
+        pub best_kills: u16,
+        pub stage_best_wave: [u8; STATION_HUNTER_STAGE_COUNT],
+        pub stage_best_kills: [u16; STATION_HUNTER_STAGE_COUNT],
+        pub stage_clear_count: [u8; STATION_HUNTER_STAGE_COUNT],
+    }
+
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    pub struct PersistedPseudoRacerData {
+        pub selected_track: u8,
+        pub best_time_ms: [u32; PSEUDO_RACER_TRACK_COUNT],
+    }
+
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
     pub struct PersistedAppData {
         pub recent_app: Option<AppId>,
         pub album_motion_tab: bool,
@@ -85,7 +110,8 @@ pub mod storage {
         pub album_playing: bool,
         pub paint_selected_color: u8,
         pub paint_pixels: [u8; PAINT_STORAGE_BYTES],
-        pub auto_battle_best_kills: u16,
+        pub station_hunter: PersistedStationHunterData,
+        pub pseudo_racer: PersistedPseudoRacerData,
         pub tap_rush_best_score: u16,
     }
 

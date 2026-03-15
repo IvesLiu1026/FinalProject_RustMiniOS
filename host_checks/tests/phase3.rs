@@ -4,7 +4,10 @@ use minios_host_checks::app_registry::{self, AppId};
 use minios_host_checks::display::ThemeMode;
 use minios_host_checks::dungeon::RenderStrategy;
 use minios_host_checks::media_manifest;
-use minios_host_checks::storage::{PersistedAppData, PersistedState, PersistedSystemSettings};
+use minios_host_checks::storage::{
+    PersistedAppData, PersistedPseudoRacerData, PersistedState, PersistedStationHunterData,
+    PersistedSystemSettings,
+};
 use minios_host_checks::storage_codec;
 use minios_host_checks::touch::TouchCalibration;
 
@@ -46,7 +49,25 @@ fn sample_state() -> PersistedState {
             album_playing: false,
             paint_selected_color: 7,
             paint_pixels,
-            auto_battle_best_kills: 42,
+            station_hunter: PersistedStationHunterData {
+                selected_stage: 3,
+                player_level: 4,
+                player_xp: 28,
+                upgrade_points: 2,
+                unlocked_stage: 4,
+                base_attack: 1,
+                base_hp: 2,
+                base_fire_rate: 1,
+                base_move_speed: 3,
+                best_kills: 42,
+                stage_best_wave: [30, 18, 9, 0, 0],
+                stage_best_kills: [44, 36, 12, 0, 0],
+                stage_clear_count: [1, 1, 0, 0, 0],
+            },
+            pseudo_racer: PersistedPseudoRacerData {
+                selected_track: 2,
+                best_time_ms: [14_230, 17_640, 19_880],
+            },
             tap_rush_best_score: 99,
         },
     }
@@ -88,26 +109,34 @@ fn storage_defaults_report_no_app_saves() {
     assert_eq!(default_apps.recent_app, None);
     assert_eq!(default_apps.paint_selected_color, 1);
     assert!(default_apps.album_playing);
-    assert_eq!(default_apps.auto_battle_best_kills, 0);
+    assert_eq!(default_apps.station_hunter.best_kills, 0);
+    assert_eq!(default_apps.station_hunter.player_level, 1);
+    assert_eq!(default_apps.station_hunter.unlocked_stage, 1);
+    assert_eq!(default_apps.pseudo_racer.selected_track, 0);
+    assert_eq!(default_apps.pseudo_racer.best_time_ms, [0; 3]);
     assert_eq!(default_apps.tap_rush_best_score, 0);
 }
 
 #[test]
 fn app_registry_slots_and_groupings_are_consistent() {
     assert_eq!(app_registry::home_apps().len(), 4);
-    assert_eq!(app_registry::game_center_apps().len(), 3);
+    assert_eq!(app_registry::game_center_apps().len(), 5);
 
     assert_eq!(app_registry::home_slot_for_app(AppId::Album), 0);
     assert_eq!(app_registry::home_slot_for_app(AppId::GameCenter), 1);
     assert_eq!(app_registry::home_slot_for_app(AppId::DungeonCore), 1);
     assert_eq!(app_registry::home_slot_for_app(AppId::AutoBattle), 1);
     assert_eq!(app_registry::home_slot_for_app(AppId::TapRush), 1);
+    assert_eq!(app_registry::home_slot_for_app(AppId::PseudoRacer), 1);
+    assert_eq!(app_registry::home_slot_for_app(AppId::GraphicsLab), 1);
     assert_eq!(app_registry::home_slot_for_app(AppId::Paint), 2);
     assert_eq!(app_registry::home_slot_for_app(AppId::Settings), 3);
 
     assert_eq!(app_registry::game_center_slot_for_app(AppId::DungeonCore), Some(0));
     assert_eq!(app_registry::game_center_slot_for_app(AppId::AutoBattle), Some(1));
-    assert_eq!(app_registry::game_center_slot_for_app(AppId::TapRush), Some(2));
+    assert_eq!(app_registry::game_center_slot_for_app(AppId::PseudoRacer), Some(2));
+    assert_eq!(app_registry::game_center_slot_for_app(AppId::GraphicsLab), Some(3));
+    assert_eq!(app_registry::game_center_slot_for_app(AppId::TapRush), Some(4));
     assert_eq!(app_registry::game_center_slot_for_app(AppId::Album), None);
 }
 
@@ -121,6 +150,8 @@ fn app_registry_descriptors_stay_bilingual_and_non_empty() {
         AppId::DungeonCore,
         AppId::AutoBattle,
         AppId::TapRush,
+        AppId::PseudoRacer,
+        AppId::GraphicsLab,
     ] {
         let descriptor = app_registry::descriptor(app_id);
         assert!(!descriptor.title(false).is_empty());

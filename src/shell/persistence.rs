@@ -1,7 +1,7 @@
 use super::*;
 
 impl MiniOs {
-    pub fn apply_persisted_state(&mut self, state: PersistedState, touch: &mut Touch) {
+    pub fn apply_persisted_state(&mut self, state: PersistedState, _touch: &mut Touch) {
         let settings = state.system;
         self.theme = settings.theme;
         self.language = if settings.language_zh {
@@ -11,22 +11,22 @@ impl MiniOs {
         };
         self.render_strategy = settings.render_strategy;
         self.touch_calibration = settings.touch_calibration;
-        self.touch_ready = settings.touch_ready && settings.touch_calibration.valid;
+        self.touch_ready = false;
         self.album.restore(apply_album_restore(&state.apps));
         self.paint.restore(apply_paint_restore(&state.apps));
-        self.auto_battle
-            .set_best_kills(state.apps.auto_battle_best_kills);
+        self.auto_battle.restore(state.apps.station_hunter);
+        self.pseudo_racer.restore(state.apps.pseudo_racer);
         self.tap_rush.set_best_score(state.apps.tap_rush_best_score);
         self.recent_app = state.apps.recent_app;
         if let Some(app_id) = self.recent_app {
             self.home_index = app_registry::home_slot_for_app(app_id);
             self.game_center.select_app(app_id);
         }
-        if self.touch_ready {
-            touch.set_calibration(settings.touch_calibration);
-            self.screen = Screen::Home;
-            self.touch_return_screen = Screen::Home;
-        }
+        self.screen = Screen::TouchCalibrate;
+        self.touch_return_screen = Screen::Home;
+        self.calibration_step = 0;
+        self.calibration_raw_x = [0; 5];
+        self.calibration_raw_y = [0; 5];
         self.force_full_redraw = true;
     }
 
@@ -53,7 +53,8 @@ impl MiniOs {
                 album_playing: album.playing,
                 paint_selected_color: paint.selected_color,
                 paint_pixels: paint.pixels,
-                auto_battle_best_kills: self.auto_battle.best_kills(),
+                station_hunter: self.auto_battle.snapshot(),
+                pseudo_racer: self.pseudo_racer.snapshot(),
                 tap_rush_best_score: self.tap_rush.best_score(),
             },
         }
@@ -65,8 +66,13 @@ impl MiniOs {
         self.auto_battle = AutoBattleApp::new();
         self.paint = PaintApp::new();
         self.tap_rush = TapRushApp::new();
+        self.pseudo_racer = PseudoRacerApp::new();
+        self.graphics_lab = GraphicsLabApp::new();
         self.recent_app = None;
         self.home_index = 0;
+        self.settings_index = 0;
+        self.settings_scroll_top_row = 0;
+        self.settings_drag_active = false;
         self.map_index = 0;
         self.album_redraw = None;
         self.paint_redraw = None;

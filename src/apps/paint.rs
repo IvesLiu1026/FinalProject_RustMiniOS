@@ -141,7 +141,7 @@ impl PaintApp {
         display.panel(14, 10, 292, 34, ui.panel, ui.lime);
         render_nav_back(display, zh_mode, ui.orange, &ui);
         display.text(
-            74,
+            84,
             18,
             if zh_mode {
                 "像素畫板"
@@ -150,15 +150,15 @@ impl PaintApp {
             },
             ui.text,
             ui.panel,
-            2,
+            1,
         );
         display.text(
-            150,
+            166,
             20,
             if zh_mode {
-                "低解析畫布，剛好很復古"
+                "復古像素畫布"
             } else {
-                "LOW-RES CANVAS WITH RETRO CHARM"
+                "RETRO DRAW PAD"
             },
             ui.text_muted,
             ui.panel,

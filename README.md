@@ -350,4 +350,7 @@ export PLATFORMIO_PACKAGES_DIR=/your/path/to/.platformio/packages
 - Mac companion setup note: [docs/mac-companion.md](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/docs/mac-companion.md)
 - final report notes: [docs/final-report-notes-2026-03-16.md](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/docs/final-report-notes-2026-03-16.md)
 - final presentation outline: [docs/final-presentation-outline-2026-03-16.md](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/docs/final-presentation-outline-2026-03-16.md)
+- Auto Hunter progression spec: [docs/auto-hunter-progression-spec-2026-03-16.md](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/docs/auto-hunter-progression-spec-2026-03-16.md)
+- Pseudo-3D racer spec: [docs/pseudo-3d-racer-spec-2026-03-16.md](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/docs/pseudo-3d-racer-spec-2026-03-16.md)
+- Graphics Lab spec: [docs/graphics-lab-spec-2026-03-16.md](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/docs/graphics-lab-spec-2026-03-16.md)
 - repo module boundary note: [docs/repo-architecture.md](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/docs/repo-architecture.md)

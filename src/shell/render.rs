@@ -19,9 +19,14 @@ impl MiniOs {
         full_refresh: bool,
     ) {
         match self.screen {
-            Screen::Home => {
-                render_home(display, self.home_index, self.theme, self.language.is_zh())
-            }
+            Screen::Home => render_home(
+                display,
+                self.home_index,
+                self.theme,
+                self.language.is_zh(),
+                self.fps_estimate,
+                millis() / 1000,
+            ),
             Screen::Album => {
                 if !full_refresh && self.album_redraw == Some(AlbumRedraw::MotionFrame) {
                     self.album.render_motion_frame(display);
@@ -44,6 +49,7 @@ impl MiniOs {
                 self.language.is_zh(),
                 self.render_strategy,
                 self.settings_index,
+                self.settings_scroll_top_row,
             ),
             Screen::About => render_about(
                 display,
@@ -118,6 +124,14 @@ impl MiniOs {
             Screen::TapRush => self
                 .tap_rush
                 .render(display, self.theme, self.language.is_zh()),
+            Screen::PseudoRacer => {
+                self.pseudo_racer
+                    .render(display, self.theme, self.language.is_zh())
+            }
+            Screen::GraphicsLab => {
+                self.graphics_lab
+                    .render(display, self.theme, self.language.is_zh())
+            }
         }
     }
 
@@ -130,51 +144,100 @@ impl MiniOs {
     pub(super) fn switch_screen(&mut self, screen: Screen) {
         self.screen = screen;
         self.clear_transient_redraws();
+        self.settings_drag_active = false;
         self.diagnostics_armed = false;
         self.diagnostics_notice = None;
+        if matches!(screen, Screen::Settings) {
+            self.sync_settings_scroll_to_selection();
+        }
         self.force_full_redraw = true;
     }
 }
 
-pub fn boot_sequence(display: &mut Display, theme: ThemeMode, safe_boot: bool) {
+pub fn boot_sequence(display: &mut Display, theme: ThemeMode, safe_boot: bool, touch_ready: bool) {
     let ui = palette(theme);
-    for band in 0..12u16 {
-        let tint = (band * 18) as u8;
-        let fill = color::mix(ui.canvas, ui.indigo, tint);
-        display.fill_rect(0, band * 20, SCREEN_WIDTH, 20, fill);
+    for band in 0..15u16 {
+        let tint = (band * 12) as u8;
+        let fill = color::mix(ui.canvas, ui.indigo, tint / 2);
+        display.fill_rect(0, band * 16, SCREEN_WIDTH, 16, fill);
     }
 
-    display.panel(18, 28, 284, 66, ui.panel, ui.cyan);
-    display.centered_text(160, 42, "FINAL PROJECT", ui.text, ui.panel, 2);
-    display.centered_text(160, 62, "RUST MINI OS", ui.white, ui.panel, 3);
+    display.fill_rect(20, 22, 280, 18, ui.panel_alt);
+    display.stroke_rect(20, 22, 280, 18, 1, ui.cyan);
+    display.text(30, 27, "MINIOS BIOS", ui.white, ui.panel_alt, 2);
+    display.text(206, 28, "ROM CHECK 2026", ui.text_muted, ui.panel_alt, 1);
 
-    display.panel(34, 120, 252, 78, ui.panel_alt, ui.orange);
-    display.centered_text(
-        160,
-        136,
-        "TACTILE DUNGEON CONSOLE",
-        ui.text,
-        ui.panel_alt,
-        2,
-    );
-    display.centered_text(
-        160,
-        162,
+    display.fill_rect(20, 48, 280, 146, ui.panel);
+    display.stroke_rect(20, 48, 280, 146, 1, ui.steel);
+
+    let lines = if safe_boot {
+        [
+            "POST: DISPLAY ........................ OK",
+            "POST: TOUCH CONTROLLER ............... BYPASS",
+            "BOOT: SAFE MODE REQUEST .............. ACK",
+            "LOAD: RECOVERY TOOLS ................. READY",
+            "NEXT: OPEN MINIMAL SERVICE DESKTOP ...",
+            "",
+        ]
+    } else if touch_ready {
+        [
+            "POST: DISPLAY ........................ OK",
+            "POST: TOUCH CALIBRATION .............. OK",
+            "LOAD: DESKTOP SHELL .................. READY",
+            "LOAD: APP REGISTRY ................... READY",
+            "LOAD: MEDIA INDEX .................... READY",
+            "NEXT: ENTER RETRO DESKTOP ............",
+        ]
+    } else {
+        [
+            "POST: DISPLAY ........................ OK",
+            "POST: TOUCH CALIBRATION .............. MISSING",
+            "LOAD: INITIAL SETUP WIZARD ........... READY",
+            "LOAD: SAFE DEFAULT THEME ............. READY",
+            "WARN: DESKTOP ACCESS REQUIRES SETUP ..",
+            "NEXT: ENTER TOUCH SETUP ..............",
+        ]
+    };
+
+    for (index, line) in lines.iter().enumerate() {
+        display.text(30, 58 + index as u16 * 18, line, ui.text, ui.panel, 1);
+        delay_ms(40);
+    }
+
+    let progress_fill = if safe_boot {
+        ui.rose
+    } else if touch_ready {
+        ui.cyan
+    } else {
+        ui.orange
+    };
+    display.fill_rect(30, 172, 260, 8, ui.shadow);
+    display.stroke_rect(30, 172, 260, 8, 1, ui.steel);
+    for step in 0..20u16 {
+        let fill = 12 + step * 12;
+        display.fill_rect(32, 174, fill, 4, progress_fill);
+        delay_ms(35);
+    }
+
+    display.text(
+        30,
+        188,
         if safe_boot {
-            "SAFE MODE REQUESTED"
+            "HANDOFF: SAFE MODE DESKTOP"
+        } else if touch_ready {
+            "HANDOFF: ICON DESKTOP"
         } else {
-            "BOOTING GRAPHICS CORE"
+            "HANDOFF: TOUCH SETUP WIZARD"
         },
         ui.text_muted,
-        ui.panel_alt,
+        ui.panel,
         1,
     );
 
-    for step in 0..18u16 {
-        let fill = 12 + step * 13;
-        display.fill_rect(48, 208, fill, 10, ui.cyan);
-        display.fill_rect(48 + fill, 208, 224 - fill, 10, ui.panel);
-        delay_ms(35);
+    for column in 0..10u16 {
+        let x = column * 32;
+        display.fill_rect(x, 0, 16, 240, ui.canvas);
+        delay_ms(12);
     }
-    delay_ms(160);
+    delay_ms(100);
 }

@@ -314,8 +314,8 @@ impl CompanionLink {
         true
     }
 
-    pub fn draw_cached_frame(&self, display: &mut Display, x: u16, y: u16) {
-        if !COMPANION_ENABLED || self.cached_len == 0 {
+    pub fn draw_cached_frame_scaled(&self, display: &mut Display, x: u16, y: u16, scale: u16) {
+        if !COMPANION_ENABLED || self.cached_len == 0 || scale == 0 {
             return;
         }
 
@@ -324,7 +324,7 @@ impl CompanionLink {
             y,
             self.cached_width,
             self.cached_height,
-            self.cached_scale,
+            scale,
             &self.frame_buffer[..self.cached_len],
         );
     }

@@ -53,12 +53,4 @@ impl RenderStrategy {
             Self::Performance => "PERFORMANCE",
         }
     }
-
-    pub const fn detail(self) -> &'static str {
-        match self {
-            Self::Quality => "FULL FLOOR / CEILING",
-            Self::Balanced => "HALF FLOOR / CEILING",
-            Self::Performance => "HALF WALL + FAST FLOOR",
-        }
-    }
 }

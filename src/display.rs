@@ -35,27 +35,27 @@ pub mod color {
     }
 
     pub const WHITE: u16 = 0xFFFF;
-    pub const MIDNIGHT: u16 = rgb565(10, 16, 30);
-    pub const DEEP_BLUE: u16 = rgb565(18, 46, 92);
+    pub const MIDNIGHT: u16 = rgb565(28, 33, 43);
+    pub const DEEP_BLUE: u16 = rgb565(72, 91, 122);
     pub const CYAN: u16 = rgb565(68, 214, 255);
     pub const ORANGE: u16 = rgb565(255, 158, 56);
     pub const ROSE: u16 = rgb565(255, 98, 129);
     pub const LIME: u16 = rgb565(154, 227, 92);
     pub const AMBER: u16 = rgb565(255, 202, 58);
-    pub const INDIGO: u16 = rgb565(63, 81, 181);
-    pub const PANEL: u16 = rgb565(18, 28, 51);
-    pub const PANEL_ALT: u16 = rgb565(28, 42, 72);
-    pub const SHADOW: u16 = rgb565(5, 9, 18);
-    pub const STEEL: u16 = rgb565(124, 152, 184);
-    pub const TEXT: u16 = rgb565(235, 244, 255);
-    pub const TEXT_MUTED: u16 = rgb565(149, 167, 194);
-    pub const FLOOR: u16 = rgb565(40, 34, 30);
-    pub const PAPER: u16 = rgb565(240, 237, 229);
-    pub const SAND: u16 = rgb565(220, 210, 194);
-    pub const INK: u16 = rgb565(38, 42, 56);
-    pub const SLATE: u16 = rgb565(101, 112, 128);
-    pub const LIGHT_SKY: u16 = rgb565(148, 198, 255);
-    pub const LIGHT_FLOOR: u16 = rgb565(205, 198, 187);
+    pub const INDIGO: u16 = rgb565(86, 103, 138);
+    pub const PANEL: u16 = rgb565(91, 88, 80);
+    pub const PANEL_ALT: u16 = rgb565(112, 109, 98);
+    pub const SHADOW: u16 = rgb565(20, 23, 31);
+    pub const STEEL: u16 = rgb565(166, 160, 146);
+    pub const TEXT: u16 = rgb565(248, 241, 226);
+    pub const TEXT_MUTED: u16 = rgb565(199, 191, 172);
+    pub const FLOOR: u16 = rgb565(56, 52, 45);
+    pub const PAPER: u16 = rgb565(235, 227, 205);
+    pub const SAND: u16 = rgb565(205, 194, 170);
+    pub const INK: u16 = rgb565(44, 46, 54);
+    pub const SLATE: u16 = rgb565(111, 108, 100);
+    pub const LIGHT_SKY: u16 = rgb565(155, 177, 206);
+    pub const LIGHT_FLOOR: u16 = rgb565(192, 181, 160);
 
     pub const fn mix(a: u16, b: u16, t: u8) -> u16 {
         let t = t as u32;
@@ -80,7 +80,7 @@ pub mod color {
 pub fn palette(theme: ThemeMode) -> Palette {
     match theme {
         ThemeMode::Dark => Palette {
-            canvas: color::MIDNIGHT,
+            canvas: color::mix(color::MIDNIGHT, color::FLOOR, 60),
             panel: color::PANEL,
             panel_alt: color::PANEL_ALT,
             shadow: color::SHADOW,
@@ -100,8 +100,8 @@ pub fn palette(theme: ThemeMode) -> Palette {
         ThemeMode::Light => Palette {
             canvas: color::PAPER,
             panel: color::SAND,
-            panel_alt: color::mix(color::PAPER, color::LIGHT_SKY, 35),
-            shadow: color::mix(color::SLATE, color::SHADOW, 120),
+            panel_alt: color::mix(color::PAPER, color::LIGHT_SKY, 28),
+            shadow: color::mix(color::SLATE, color::SHADOW, 140),
             text: color::INK,
             text_muted: color::SLATE,
             steel: color::mix(color::SLATE, color::WHITE, 80),

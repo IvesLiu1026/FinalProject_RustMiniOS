@@ -9,6 +9,8 @@ pub enum AppId {
     DungeonCore,
     AutoBattle,
     TapRush,
+    PseudoRacer,
+    GraphicsLab,
 }
 
 #[derive(Clone, Copy)]
@@ -33,8 +35,24 @@ impl AppAccent {
 }
 
 #[derive(Clone, Copy)]
+pub enum AppIcon {
+    Album,
+    GameCenter,
+    Paint,
+    Settings,
+    Dungeon,
+    Hunter,
+    TapRush,
+    Racer,
+    Lab,
+}
+
+#[derive(Clone, Copy)]
 pub struct AppDescriptor {
     pub accent: AppAccent,
+    pub icon: AppIcon,
+    pub desktop_label_en: &'static str,
+    pub desktop_label_zh: &'static str,
     pub title_en: &'static str,
     pub title_zh: &'static str,
     pub subtitle_en: &'static str,
@@ -57,6 +75,14 @@ impl AppDescriptor {
             self.subtitle_en
         }
     }
+
+    pub fn desktop_label(self, zh_mode: bool) -> &'static str {
+        if zh_mode {
+            self.desktop_label_zh
+        } else {
+            self.desktop_label_en
+        }
+    }
 }
 
 const HOME_APPS: [AppId; 4] = [
@@ -66,7 +92,13 @@ const HOME_APPS: [AppId; 4] = [
     AppId::Settings,
 ];
 
-const GAME_CENTER_APPS: [AppId; 3] = [AppId::DungeonCore, AppId::AutoBattle, AppId::TapRush];
+const GAME_CENTER_APPS: [AppId; 5] = [
+    AppId::DungeonCore,
+    AppId::AutoBattle,
+    AppId::PseudoRacer,
+    AppId::GraphicsLab,
+    AppId::TapRush,
+];
 
 pub fn home_apps() -> &'static [AppId] {
     &HOME_APPS
@@ -79,7 +111,12 @@ pub fn game_center_apps() -> &'static [AppId] {
 pub fn home_slot_for_app(app_id: AppId) -> usize {
     match app_id {
         AppId::Album => 0,
-        AppId::GameCenter | AppId::DungeonCore | AppId::AutoBattle | AppId::TapRush => 1,
+        AppId::GameCenter
+        | AppId::DungeonCore
+        | AppId::AutoBattle
+        | AppId::TapRush
+        | AppId::PseudoRacer
+        | AppId::GraphicsLab => 1,
         AppId::Paint => 2,
         AppId::Settings => 3,
     }
@@ -95,6 +132,9 @@ pub fn descriptor(app_id: AppId) -> AppDescriptor {
     match app_id {
         AppId::Album => AppDescriptor {
             accent: AppAccent::Cyan,
+            icon: AppIcon::Album,
+            desktop_label_en: "MY ALBUM",
+            desktop_label_zh: "我的相簿",
             title_en: "ALBUM",
             title_zh: "相簿",
             subtitle_en: "STILLS + MOTION",
@@ -102,6 +142,9 @@ pub fn descriptor(app_id: AppId) -> AppDescriptor {
         },
         AppId::GameCenter => AppDescriptor {
             accent: AppAccent::Rose,
+            icon: AppIcon::GameCenter,
+            desktop_label_en: "GAMES",
+            desktop_label_zh: "遊戲集",
             title_en: "GAME CENTER",
             title_zh: "遊戲中心",
             subtitle_en: "DUNGEON HEADLINER",
@@ -109,6 +152,9 @@ pub fn descriptor(app_id: AppId) -> AppDescriptor {
         },
         AppId::Paint => AppDescriptor {
             accent: AppAccent::Lime,
+            icon: AppIcon::Paint,
+            desktop_label_en: "PAINT",
+            desktop_label_zh: "小畫家",
             title_en: "PIXEL PAINT",
             title_zh: "像素畫板",
             subtitle_en: "RETRO DRAW PAD",
@@ -116,6 +162,9 @@ pub fn descriptor(app_id: AppId) -> AppDescriptor {
         },
         AppId::Settings => AppDescriptor {
             accent: AppAccent::Orange,
+            icon: AppIcon::Settings,
+            desktop_label_en: "CONTROL",
+            desktop_label_zh: "控制台",
             title_en: "SETTINGS",
             title_zh: "系統設定",
             subtitle_en: "THEME + UTILITIES",
@@ -123,6 +172,9 @@ pub fn descriptor(app_id: AppId) -> AppDescriptor {
         },
         AppId::DungeonCore => AppDescriptor {
             accent: AppAccent::Cyan,
+            icon: AppIcon::Dungeon,
+            desktop_label_en: "DUNGEON",
+            desktop_label_zh: "地城",
             title_en: "DUNGEON CORE",
             title_zh: "地城核心",
             subtitle_en: "MULTI-MAP 3D RAYCAST ADVENTURE",
@@ -130,17 +182,43 @@ pub fn descriptor(app_id: AppId) -> AppDescriptor {
         },
         AppId::AutoBattle => AppDescriptor {
             accent: AppAccent::Amber,
-            title_en: "AUTO HUNTER",
-            title_zh: "自動獵手",
-            subtitle_en: "STOP TO AUTO-FIRE THE NEAREST ENEMY",
-            subtitle_zh: "停下來自動射最近敵人",
+            icon: AppIcon::Hunter,
+            desktop_label_en: "STATION",
+            desktop_label_zh: "定點獵手",
+            title_en: "STATION HUNTER",
+            title_zh: "定點獵手",
+            subtitle_en: "STOP TO LOCK, STAGES + BOSSES + BUILDS",
+            subtitle_zh: "停下鎖定射擊，含關卡與頭目",
         },
         AppId::TapRush => AppDescriptor {
             accent: AppAccent::Cyan,
+            icon: AppIcon::TapRush,
+            desktop_label_en: "TAP RUSH",
+            desktop_label_zh: "衝刺",
             title_en: "TAP RUSH",
             title_zh: "點擊衝刺",
             subtitle_en: "REACTION MICROGAME WITH FAST ROUNDS",
             subtitle_zh: "反應小遊戲，快打快拿分",
+        },
+        AppId::PseudoRacer => AppDescriptor {
+            accent: AppAccent::Orange,
+            icon: AppIcon::Racer,
+            desktop_label_en: "RACER",
+            desktop_label_zh: "賽車",
+            title_en: "PSEUDO RACER",
+            title_zh: "假 3D 賽車",
+            subtitle_en: "SCANLINE ROAD / CHECKPOINT RUN",
+            subtitle_zh: "假 3D 道路與檢查點衝刺",
+        },
+        AppId::GraphicsLab => AppDescriptor {
+            accent: AppAccent::Lime,
+            icon: AppIcon::Lab,
+            desktop_label_en: "GRAPH LAB",
+            desktop_label_zh: "圖學實驗",
+            title_en: "GRAPHICS LAB",
+            title_zh: "圖學實驗室",
+            subtitle_en: "STARFIELD / PLASMA / FIRE / 3D",
+            subtitle_zh: "星空 / 電漿 / 火焰 / 3D 線框",
         },
     }
 }

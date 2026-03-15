@@ -4,14 +4,14 @@ use heapless::String;
 
 use crate::app_registry::descriptor;
 use crate::board::Board;
-use crate::display::{palette, Display, ThemeMode};
+use crate::display::{color, palette, Display, ThemeMode};
 use crate::dungeon::RenderStrategy;
 use crate::storage::StorageStatus;
 use crate::system_info;
 
 use super::{
-    draw_gradient_background, render_nav_back, DiagnosticsNotice, DIAG_ACTION_H, DIAG_ACTION_W,
-    DIAG_ACTION_Y, DIAG_CLEAR_X, DIAG_RESET_X,
+    draw_gradient_background, draw_info_strip, draw_shell_window, draw_title_bar, render_nav_back,
+    DiagnosticsNotice, DIAG_ACTION_H, DIAG_ACTION_W, DIAG_ACTION_Y, DIAG_CLEAR_X, DIAG_RESET_X,
 };
 
 pub fn render_diagnostics(
@@ -31,150 +31,144 @@ pub fn render_diagnostics(
 ) {
     let ui = palette(theme);
     draw_gradient_background(display, theme, 96);
-    display.panel(16, 12, 288, 34, ui.panel, ui.white);
-    render_nav_back(display, zh_mode, ui.cyan, &ui);
-    display.text(
-        74,
-        20,
+    draw_shell_window(display, ui.white, &ui);
+    draw_title_bar(
+        display,
         if zh_mode {
             "系統診斷"
         } else {
             "DIAGNOSTICS"
         },
-        ui.text,
-        ui.panel,
-        2,
+        if zh_mode {
+            "build / storage / runtime / recovery"
+        } else {
+            "build / storage / runtime / recovery"
+        },
+        ui.white,
+        &ui,
     );
-
-    display.panel(18, 56, 284, 46, ui.panel_alt, ui.cyan);
+    render_nav_back(display, zh_mode, ui.cyan, &ui);
     let mut fps_line: String<24> = String::new();
     let _ = write!(&mut fps_line, "{} FPS", fps);
-    display.text(
-        28,
-        66,
-        if zh_mode {
-            "返回頁面"
-        } else {
-            "RETURN TARGET"
-        },
-        ui.text_muted,
-        ui.panel_alt,
-        1,
-    );
-    display.text(126, 66, active_screen, ui.text, ui.panel_alt, 1);
-    display.text(
-        28,
-        80,
-        if zh_mode {
-            "即時幀率"
-        } else {
-            "FRAME RATE"
-        },
-        ui.text_muted,
-        ui.panel_alt,
-        1,
-    );
-    display.text(126, 80, &fps_line, ui.amber, ui.panel_alt, 1);
     let mut build_line: String<32> = String::new();
     let _ = write!(
         &mut build_line,
-        "v{} {} {}",
+        "v{} {}",
         system_info::app_version(),
-        system_info::git_sha(),
-        system_info::build_profile()
+        system_info::git_sha()
     );
-    display.text(
-        28,
+    draw_info_strip(
+        display,
+        18,
+        52,
         92,
-        if zh_mode {
-            "建置資訊"
-        } else {
-            "BUILD INFO"
-        },
-        ui.text_muted,
-        ui.panel_alt,
-        1,
+        if zh_mode { "畫面" } else { "RETURN" },
+        active_screen,
+        ui.cyan,
+        &ui,
     );
-    display.text(126, 92, &build_line, ui.text, ui.panel_alt, 1);
+    draw_info_strip(
+        display,
+        114,
+        52,
+        92,
+        if zh_mode { "幀率" } else { "FPS" },
+        &fps_line,
+        ui.amber,
+        &ui,
+    );
+    draw_info_strip(
+        display,
+        210,
+        52,
+        92,
+        if zh_mode { "建置" } else { "BUILD" },
+        &build_line,
+        ui.white,
+        &ui,
+    );
 
-    display.panel(18, 108, 136, 80, ui.panel, ui.orange);
+    display.panel(18, 74, 136, 108, ui.panel, ui.orange);
     display.text(
         28,
-        118,
+        86,
         if zh_mode { "系統狀態" } else { "SYSTEM" },
         ui.text,
         ui.panel,
         2,
     );
-    display.text(
+    draw_runtime_icon(display, 116, 82, &ui);
+    draw_info_strip(
+        display,
         28,
-        140,
-        if board.led_on() {
-            if zh_mode {
-                "LED: 開啟"
-            } else {
-                "LED: ON"
-            }
-        } else if zh_mode {
-            "LED: 關閉"
-        } else {
-            "LED: OFF"
-        },
-        if board.led_on() {
-            ui.lime
-        } else {
-            ui.text_muted
-        },
-        ui.panel,
-        1,
+        106,
+        116,
+        if zh_mode { "LED" } else { "LED" },
+        if board.led_on() { "ON" } else { "OFF" },
+        if board.led_on() { ui.lime } else { ui.steel },
+        &ui,
     );
-    display.text(
+    draw_info_strip(
+        display,
         28,
-        154,
+        124,
+        116,
+        if zh_mode { "觸控" } else { "TOUCH" },
         if touch_ready {
             if zh_mode {
-                "觸控: 已校正"
+                "已校正"
             } else {
-                "TOUCH: CALIBRATED"
+                "READY"
             }
         } else if zh_mode {
-            "觸控: 未就緒"
+            "未就緒"
         } else {
-            "TOUCH: NOT READY"
+            "NOT READY"
         },
         if touch_ready { ui.cyan } else { ui.rose },
-        ui.panel,
-        1,
+        &ui,
     );
-    display.text(28, 168, render_strategy.label(), ui.text_muted, ui.panel, 1);
-    display.text(
+    draw_info_strip(
+        display,
         28,
-        180,
+        142,
+        116,
+        if zh_mode { "渲染" } else { "RENDER" },
+        render_strategy.label(),
+        ui.lime,
+        &ui,
+    );
+    draw_info_strip(
+        display,
+        28,
+        160,
+        116,
+        if zh_mode { "開機" } else { "BOOT" },
         if safe_boot {
             if zh_mode {
-                "本次: 安全模式"
+                "安全模式"
             } else {
-                "BOOT: SAFE MODE"
+                "SAFE"
             }
         } else if zh_mode {
-            "本次: 正常開機"
+            "正常"
         } else {
-            "BOOT: NORMAL"
+            "NORMAL"
         },
-        if safe_boot { ui.amber } else { ui.text_muted },
-        ui.panel,
-        1,
+        if safe_boot { ui.amber } else { ui.cyan },
+        &ui,
     );
 
-    display.panel(166, 108, 136, 80, ui.panel, ui.lime);
+    display.panel(166, 74, 136, 108, ui.panel, ui.lime);
     display.text(
         176,
-        118,
+        86,
         if zh_mode { "儲存狀態" } else { "STORAGE" },
         ui.text,
         ui.panel,
         2,
     );
+    draw_storage_icon(display, 262, 82, &ui);
     let status_text = if storage_status.valid_record {
         if zh_mode {
             "紀錄正常"
@@ -192,7 +186,20 @@ pub fn render_diagnostics(
     } else {
         "EMPTY"
     };
-    display.text(176, 136, status_text, ui.text_muted, ui.panel, 1);
+    draw_info_strip(
+        display,
+        176,
+        106,
+        116,
+        if zh_mode { "紀錄" } else { "STATUS" },
+        status_text,
+        if storage_status.valid_record {
+            ui.lime
+        } else {
+            ui.rose
+        },
+        &ui,
+    );
 
     let mut version_line: String<28> = String::new();
     if storage_status.found_magic {
@@ -210,7 +217,16 @@ pub fn render_diagnostics(
     } else {
         let _ = write!(&mut version_line, "V-- -- --B");
     }
-    display.text(176, 148, &version_line, ui.text_muted, ui.panel, 1);
+    draw_info_strip(
+        display,
+        176,
+        124,
+        116,
+        if zh_mode { "格式" } else { "FORMAT" },
+        &version_line,
+        ui.white,
+        &ui,
+    );
 
     let mut save_line: String<28> = String::new();
     let _ = write!(
@@ -230,7 +246,16 @@ pub fn render_diagnostics(
         },
         storage_status.paint_pixels_used
     );
-    display.text(176, 160, &save_line, ui.text_muted, ui.panel, 1);
+    draw_info_strip(
+        display,
+        176,
+        142,
+        116,
+        if zh_mode { "存檔" } else { "SAVES" },
+        &save_line,
+        ui.amber,
+        &ui,
+    );
 
     let mut media_line: String<28> = String::new();
     let _ = write!(
@@ -246,7 +271,16 @@ pub fn render_diagnostics(
             "ROM"
         }
     );
-    display.text(176, 172, &media_line, ui.text_muted, ui.panel, 1);
+    draw_info_strip(
+        display,
+        176,
+        160,
+        116,
+        if zh_mode { "媒體" } else { "MEDIA" },
+        &media_line,
+        ui.cyan,
+        &ui,
+    );
 
     let mut recent_line: String<28> = String::new();
     let recent_label = storage_status
@@ -259,7 +293,16 @@ pub fn render_diagnostics(
         if zh_mode { "最近" } else { "LAST" },
         recent_label
     );
-    display.text(176, 184, &recent_line, ui.text_muted, ui.panel, 1);
+    draw_info_strip(
+        display,
+        176,
+        178,
+        116,
+        if zh_mode { "最近" } else { "LAST" },
+        recent_label,
+        ui.rose,
+        &ui,
+    );
 
     let selected_clear = selected_action == 0;
     let selected_reset = selected_action == 1;
@@ -304,7 +347,6 @@ pub fn render_diagnostics(
         &ui,
     );
 
-    display.panel(18, 216, 284, 22, ui.panel_alt, ui.white);
     let (notice_title, notice_body) = match notice {
         Some(DiagnosticsNotice::ClearReady) => (
             if zh_mode {
@@ -379,8 +421,10 @@ pub fn render_diagnostics(
             },
         ),
     };
-    display.text(28, 222, notice_title, ui.text, ui.panel_alt, 1);
-    display.text(28, 232, notice_body, ui.text_muted, ui.panel_alt, 1);
+    display.fill_rect(18, 206, 284, 22, ui.panel_alt);
+    display.stroke_rect(18, 206, 284, 22, 1, ui.steel);
+    display.text(28, 210, notice_title, ui.text, ui.panel_alt, 1);
+    display.text(28, 220, notice_body, ui.text_muted, ui.panel_alt, 1);
 }
 
 fn render_diag_action_button(
@@ -397,6 +441,28 @@ fn render_diag_action_button(
 ) {
     let fill = if armed { ui.panel } else { ui.panel_alt };
     display.panel(x, y, w, h, fill, accent);
-    display.text(x + 8, y + 5, title, ui.text, fill, 1);
-    display.text(x + 8, y + 14, subtitle, ui.text_muted, fill, 1);
+    display.fill_rect(x + 8, y + 5, 10, 10, color::mix(fill, accent, 24));
+    display.stroke_rect(x + 8, y + 5, 10, 10, 1, accent);
+    display.fill_rect(x + 11, y + 8, 4, 4, accent);
+    display.text(x + 24, y + 5, title, ui.text, fill, 1);
+    display.text(x + 24, y + 13, subtitle, ui.text_muted, fill, 1);
+}
+
+fn draw_runtime_icon(display: &mut Display, x: u16, y: u16, ui: &crate::display::Palette) {
+    display.fill_rect(x, y, 24, 16, color::mix(ui.panel_alt, ui.orange, 18));
+    display.stroke_rect(x, y, 24, 16, 1, ui.orange);
+    display.fill_rect(x + 3, y + 3, 14, 8, ui.text);
+    display.fill_rect(x + 5, y + 5, 10, 4, color::mix(ui.cyan, ui.white, 76));
+    display.fill_rect(x + 18, y + 4, 3, 3, ui.lime);
+    display.fill_rect(x + 18, y + 9, 3, 3, ui.amber);
+}
+
+fn draw_storage_icon(display: &mut Display, x: u16, y: u16, ui: &crate::display::Palette) {
+    display.fill_rect(x, y, 24, 16, color::mix(ui.panel_alt, ui.lime, 18));
+    display.stroke_rect(x, y, 24, 16, 1, ui.lime);
+    display.fill_rect(x + 4, y + 3, 10, 10, ui.white);
+    display.stroke_rect(x + 4, y + 3, 10, 10, 1, ui.cyan);
+    display.fill_rect(x + 6, y + 5, 6, 3, color::mix(ui.cyan, ui.white, 76));
+    display.fill_rect(x + 15, y + 4, 5, 8, ui.text);
+    display.fill_rect(x + 16, y + 6, 3, 4, color::mix(ui.panel_alt, ui.rose, 20));
 }

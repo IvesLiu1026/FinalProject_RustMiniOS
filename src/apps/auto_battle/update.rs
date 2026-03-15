@@ -1,4 +1,4 @@
-use libm::{atan2f, cosf, sinf, sqrtf};
+use libm::{atan2f, sqrtf};
 
 use crate::board::ButtonSnapshot;
 use crate::touch::TouchState;
@@ -7,6 +7,8 @@ use crate::ui::{NAV_BACK_H, NAV_BACK_W, NAV_BACK_X, NAV_BACK_Y};
 use super::super::{touch_active_in_rect, touch_released_in_rect};
 use super::*;
 
+const RESULT_BUTTON_GAP: u16 = 8;
+
 impl AutoBattleApp {
     pub fn update(
         &mut self,
@@ -14,38 +16,205 @@ impl AutoBattleApp {
         touch: &TouchState,
         dt_ms: u32,
     ) -> AutoBattleAction {
-        if input.home_chord()
-            || input.k0_just_pressed
-            || touch_released_in_rect(touch, NAV_BACK_X, NAV_BACK_Y, NAV_BACK_W, NAV_BACK_H)
-        {
+        if input.home_chord() {
             return AutoBattleAction::ExitGameCenter;
         }
 
         match self.state {
-            BattleState::Ready | BattleState::Victory | BattleState::Defeat => {
-                if input.k1_just_pressed
-                    || touch_released_in_rect(
-                        touch,
-                        OVERLAY_ACTION_X,
-                        OVERLAY_ACTION_Y,
-                        OVERLAY_ACTION_W,
-                        OVERLAY_ACTION_H,
-                    )
+            BattleState::Profile => return self.update_profile(input, touch),
+            BattleState::StageSelect => return self.update_stage_select(input, touch),
+            BattleState::Running => {
+                if input.k0_just_pressed
+                    || touch_released_in_rect(touch, NAV_BACK_X, NAV_BACK_Y, NAV_BACK_W, NAV_BACK_H)
                 {
-                    self.reset();
+                    return AutoBattleAction::ExitGameCenter;
                 }
+                self.update_running(touch, dt_ms);
             }
-            BattleState::LevelUp => self.update_level_up(input, touch),
-            BattleState::Running => self.update_running(touch, dt_ms),
+            BattleState::BossReward => {
+                if input.k0_just_pressed
+                    || touch_released_in_rect(touch, NAV_BACK_X, NAV_BACK_Y, NAV_BACK_W, NAV_BACK_H)
+                {
+                    return AutoBattleAction::ExitGameCenter;
+                }
+                self.update_reward(input, touch);
+            }
+            BattleState::StageClear | BattleState::Defeat => {
+                if input.k0_just_pressed
+                    || touch_released_in_rect(touch, NAV_BACK_X, NAV_BACK_Y, NAV_BACK_W, NAV_BACK_H)
+                {
+                    self.enter();
+                    return AutoBattleAction::Stay;
+                }
+                self.update_result(input, touch);
+            }
         }
 
         AutoBattleAction::Stay
+    }
+
+    fn update_profile(&mut self, input: &ButtonSnapshot, touch: &TouchState) -> AutoBattleAction {
+        if input.k0_just_pressed {
+            self.profile_cursor =
+                (self.profile_cursor + ProfileAction::ALL.len() - 1) % ProfileAction::ALL.len();
+            self.request_redraw(AutoBattleRedraw::Full);
+        }
+        if input.wkup_just_pressed {
+            self.profile_cursor = (self.profile_cursor + 1) % ProfileAction::ALL.len();
+            self.request_redraw(AutoBattleRedraw::Full);
+        }
+        if input.k1_just_pressed {
+            self.activate_profile_action(ProfileAction::ALL[self.profile_cursor]);
+        }
+
+        if touch_released_in_rect(touch, NAV_BACK_X, NAV_BACK_Y, NAV_BACK_W, NAV_BACK_H) {
+            return AutoBattleAction::ExitGameCenter;
+        }
+
+        for (index, action) in ProfileAction::ALL.iter().copied().enumerate() {
+            let (x, y, w, h) = profile_action_rect(action);
+            if touch_released_in_rect(touch, x, y, w, h) {
+                if self.profile_cursor == index {
+                    self.activate_profile_action(action);
+                } else {
+                    self.profile_cursor = index;
+                    self.request_redraw(AutoBattleRedraw::Full);
+                }
+                break;
+            }
+        }
+
+        AutoBattleAction::Stay
+    }
+
+    fn activate_profile_action(&mut self, action: ProfileAction) {
+        match action {
+            ProfileAction::Deploy => self.open_stage_select(),
+            _ => self.spend_profile_upgrade(action),
+        }
+    }
+
+    fn update_stage_select(
+        &mut self,
+        input: &ButtonSnapshot,
+        touch: &TouchState,
+    ) -> AutoBattleAction {
+        if input.k0_just_pressed {
+            self.stage_select_index = (self.stage_select_index + STAGE_COUNT - 1) % STAGE_COUNT;
+            self.request_redraw(AutoBattleRedraw::Full);
+        }
+        if input.wkup_just_pressed {
+            self.stage_select_index = (self.stage_select_index + 1) % STAGE_COUNT;
+            self.request_redraw(AutoBattleRedraw::Full);
+        }
+        if input.k1_just_pressed && self.is_stage_unlocked(self.stage_select_index) {
+            self.start_selected_stage();
+        }
+
+        if touch_released_in_rect(touch, NAV_BACK_X, NAV_BACK_Y, NAV_BACK_W, NAV_BACK_H) {
+            self.enter();
+            return AutoBattleAction::Stay;
+        }
+
+        for index in 0..STAGE_COUNT {
+            let y = STAGE_CARD_Y + index as u16 * (STAGE_CARD_H + STAGE_CARD_GAP);
+            if touch_released_in_rect(touch, STAGE_CARD_X, y, STAGE_CARD_W, STAGE_CARD_H) {
+                if self.stage_select_index == index && self.is_stage_unlocked(index) {
+                    self.start_selected_stage();
+                } else {
+                    self.stage_select_index = index;
+                    self.request_redraw(AutoBattleRedraw::Full);
+                }
+                break;
+            }
+        }
+
+        AutoBattleAction::Stay
+    }
+
+    fn update_result(&mut self, input: &ButtonSnapshot, touch: &TouchState) {
+        if input.k0_just_pressed || input.wkup_just_pressed {
+            self.result_choice = (self.result_choice + 1) % 2;
+            self.request_redraw(AutoBattleRedraw::Full);
+        }
+        if input.k1_just_pressed {
+            self.apply_result_choice();
+            return;
+        }
+
+        for index in 0..2 {
+            let y = RESULT_BUTTON_Y + index as u16 * (RESULT_BUTTON_H + RESULT_BUTTON_GAP);
+            if touch_released_in_rect(touch, RESULT_BUTTON_X, y, RESULT_BUTTON_W, RESULT_BUTTON_H) {
+                if self.result_choice == index {
+                    self.apply_result_choice();
+                } else {
+                    self.result_choice = index;
+                    self.request_redraw(AutoBattleRedraw::Full);
+                }
+                break;
+            }
+        }
+    }
+
+    fn apply_result_choice(&mut self) {
+        match self.state {
+            BattleState::StageClear => {
+                if self.result_choice == 0 {
+                    self.enter();
+                } else {
+                    self.open_stage_select();
+                }
+            }
+            BattleState::Defeat => {
+                if self.result_choice == 0 {
+                    self.start_selected_stage();
+                } else {
+                    self.enter();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn update_reward(&mut self, input: &ButtonSnapshot, touch: &TouchState) {
+        let previous_choice = self.selected_choice;
+        if input.k0_just_pressed {
+            self.selected_choice = (self.selected_choice + LEVEL_UP_CHOICES - 1) % LEVEL_UP_CHOICES;
+        }
+        if input.wkup_just_pressed {
+            self.selected_choice = (self.selected_choice + 1) % LEVEL_UP_CHOICES;
+        }
+        if input.k1_just_pressed {
+            let buff = self.reward_choices[self.selected_choice];
+            self.apply_buff(buff);
+            return;
+        }
+
+        for index in 0..LEVEL_UP_CHOICES {
+            let y = BUFF_Y + index as u16 * (BUFF_H + BUFF_GAP);
+            if touch_released_in_rect(touch, BUFF_X, y, BUFF_W, BUFF_H) {
+                self.selected_choice = index;
+                let buff = self.reward_choices[index];
+                self.apply_buff(buff);
+                return;
+            }
+        }
+
+        if self.selected_choice != previous_choice {
+            self.request_redraw(AutoBattleRedraw::Full);
+        }
     }
 
     fn update_running(&mut self, touch: &TouchState, dt_ms: u32) {
         let panel_before = self.panel_snapshot();
         self.hit_invuln_ms = self.hit_invuln_ms.saturating_sub(dt_ms as u16);
         self.shot_cooldown_ms = self.shot_cooldown_ms.saturating_sub(dt_ms as u16);
+        self.damage_flash_ms = self.damage_flash_ms.saturating_sub(dt_ms as u16);
+        self.heal_flash_ms = self.heal_flash_ms.saturating_sub(dt_ms as u16);
+        self.weapon_flash_ms = self.weapon_flash_ms.saturating_sub(dt_ms as u16);
+        self.wave_banner_ms = self.wave_banner_ms.saturating_sub(dt_ms as u16);
+        self.boss_banner_ms = self.boss_banner_ms.saturating_sub(dt_ms as u16);
+        self.boss_intro_ms = self.boss_intro_ms.saturating_sub(dt_ms as u16);
 
         if touch_active_in_rect(touch, ARENA_X, ARENA_Y, ARENA_W, ARENA_H) {
             self.target_x = (touch.x - ARENA_X).clamp(10, ARENA_W - 10) as f32;
@@ -71,72 +240,108 @@ impl AutoBattleApp {
             self.fire_at_nearest_enemy();
         }
 
+        self.update_pickups();
+        if self.boss_intro_ms > 0 {
+            if self.panel_snapshot() != panel_before {
+                self.request_redraw(AutoBattleRedraw::ArenaAndPanel);
+            } else {
+                self.request_redraw(AutoBattleRedraw::Arena);
+            }
+            return;
+        }
+
         self.update_enemies(dt_ms as u16);
         self.update_projectiles(dt_ms as u16);
+        self.update_wave_spawning(dt_ms as u16);
 
         if self.health <= 0 {
             self.health = 0;
-            self.sync_best_kills();
-            self.state = BattleState::Defeat;
-            self.request_redraw(AutoBattleRedraw::Full);
+            self.fail_stage();
             return;
         }
 
-        if self.kills >= TARGET_KILLS {
-            self.sync_best_kills();
-            self.state = BattleState::Victory;
-            self.request_redraw(AutoBattleRedraw::Full);
-            return;
-        }
+        if self.wave_tracker.remaining_to_kill == 0 && self.active_enemy_count() == 0 {
+            if self.wave_tracker.wave >= WAVES_PER_STAGE {
+                self.complete_stage();
+                return;
+            }
 
-        if self.kills >= self.next_level_kills {
-            self.roll_level_up_choices();
+            self.roll_reward_choices();
             self.selected_choice = 0;
             self.projectiles = [Projectile::empty(); MAX_PROJECTILES];
-            self.shot_cooldown_ms = 0;
-            self.state = BattleState::LevelUp;
+            self.state = BattleState::BossReward;
             self.request_redraw(AutoBattleRedraw::Full);
             return;
         }
+
+        let arena_fx_active = self.damage_flash_ms > 0
+            || self.heal_flash_ms > 0
+            || self.weapon_flash_ms > 0
+            || self.banner_active();
 
         if self.panel_snapshot() != panel_before {
             self.request_redraw(AutoBattleRedraw::ArenaAndPanel);
+        } else if arena_fx_active {
+            self.request_redraw(AutoBattleRedraw::Arena);
         } else {
             self.request_redraw(AutoBattleRedraw::Arena);
         }
     }
 
-    fn update_level_up(&mut self, input: &ButtonSnapshot, touch: &TouchState) {
-        let previous_choice = self.selected_choice;
-
-        if input.k0_just_pressed {
-            self.selected_choice = (self.selected_choice + LEVEL_UP_CHOICES - 1) % LEVEL_UP_CHOICES;
+    fn update_wave_spawning(&mut self, dt_ms: u16) {
+        if self.wave_tracker.kind == WaveKind::Boss {
+            return;
         }
-        if input.wkup_just_pressed {
-            self.selected_choice = (self.selected_choice + 1) % LEVEL_UP_CHOICES;
+        if self.wave_tracker.spawned >= self.wave_tracker.total_to_spawn {
+            return;
         }
-        if input.k1_just_pressed {
-            let buff = self.level_up_choices[self.selected_choice];
-            self.apply_buff(buff);
+        if self.active_enemy_count() >= self.wave_tracker.active_cap as usize {
             return;
         }
 
-        for index in 0..LEVEL_UP_CHOICES {
-            let y = BUFF_Y + index as u16 * (BUFF_H + BUFF_GAP);
-            if touch_released_in_rect(touch, BUFF_X, y, BUFF_W, BUFF_H) {
-                self.selected_choice = index;
-                let buff = self.level_up_choices[index];
-                self.apply_buff(buff);
-                return;
+        self.wave_tracker.spawn_timer_ms = self.wave_tracker.spawn_timer_ms.saturating_add(dt_ms);
+        while self.wave_tracker.spawn_timer_ms >= self.wave_tracker.spawn_interval_ms
+            && self.wave_tracker.spawned < self.wave_tracker.total_to_spawn
+            && self.active_enemy_count() < self.wave_tracker.active_cap as usize
+        {
+            self.wave_tracker.spawn_timer_ms = self
+                .wave_tracker
+                .spawn_timer_ms
+                .saturating_sub(self.wave_tracker.spawn_interval_ms);
+            if !self.spawn_wave_enemy() {
+                break;
             }
         }
+    }
 
-        if self.selected_choice != previous_choice {
-            self.request_redraw(AutoBattleRedraw::Overlay);
+    fn update_pickups(&mut self) {
+        let mut changed = false;
+        for pickup in &mut self.pickups {
+            if !pickup.active {
+                continue;
+            }
+            let dx = pickup.x - self.player_x;
+            let dy = pickup.y - self.player_y;
+            let radius = (pickup.size as f32 * 0.5 + PLAYER_SIZE as f32 * 0.5).max(12.0);
+            if dx * dx + dy * dy <= radius * radius {
+                pickup.active = false;
+                match pickup.kind {
+                    PickupKind::MedKit => {
+                        self.health = (self.health + PICKUP_HEAL_AMOUNT).min(self.max_health);
+                        self.heal_flash_ms = HEAL_FLASH_MS;
+                    }
+                }
+                changed = true;
+            }
+        }
+        if changed {
+            self.request_redraw(AutoBattleRedraw::ArenaAndPanel);
         }
     }
 
     fn update_enemies(&mut self, dt_ms: u16) {
+        use libm::sinf;
+
         let mut queued_shots = [None; MAX_ENEMIES];
         let mut queued_shot_count = 0usize;
         let mut queued_summons = [None; MAX_ENEMIES];
@@ -183,9 +388,9 @@ impl AutoBattleApp {
                             && queued_shot_count < MAX_ENEMIES
                         {
                             queued_shots[queued_shot_count] =
-                                Some((enemy.x, enemy.y, atan2f(dy, dx)));
+                                Some((enemy.kind, enemy.x, enemy.y, atan2f(dy, dx)));
                             queued_shot_count += 1;
-                            enemy.attack_timer_ms = 980 + (enemy.phase % 220);
+                            enemy.attack_timer_ms = 920 + (enemy.phase % 180);
                         }
                         (
                             dir_x * advance + perp_x * strafe,
@@ -203,7 +408,7 @@ impl AutoBattleApp {
                             && dist < 138.0
                         {
                             enemy.burst_timer_ms = 160;
-                            enemy.attack_timer_ms = 940 + (enemy.phase % 180);
+                            enemy.attack_timer_ms = 920 + (enemy.phase % 180);
                         }
 
                         if enemy.burst_timer_ms > 0 {
@@ -223,11 +428,93 @@ impl AutoBattleApp {
                             0.0
                         };
                         let orbit = sinf(enemy.phase as f32 * 0.010) * 0.52;
-                        if enemy.attack_timer_ms == 0 && queued_summon_count < MAX_ENEMIES {
+                        if enemy.attack_timer_ms == 0
+                            && enemy.charges > 0
+                            && queued_summon_count < MAX_ENEMIES
+                        {
                             queued_summons[queued_summon_count] =
-                                Some((enemy.x, enemy.y, enemy.phase));
+                                Some((enemy.x, enemy.y, enemy.phase, false));
                             queued_summon_count += 1;
-                            enemy.attack_timer_ms = 1_800 + (enemy.phase % 320);
+                            enemy.attack_timer_ms = 1_500 + (enemy.phase % 320);
+                            enemy.charges = enemy.charges.saturating_sub(1);
+                        }
+                        (
+                            dir_x * advance + perp_x * orbit,
+                            dir_y * advance + perp_y * orbit,
+                        )
+                    }
+                    EnemyKind::BossRam => {
+                        if enemy.burst_timer_ms == 0 && enemy.attack_timer_ms == 0 && dist > 32.0 {
+                            enemy.burst_timer_ms = 240;
+                            enemy.attack_timer_ms = 720 + (enemy.phase % 180);
+                        }
+                        if enemy.burst_timer_ms > 0 {
+                            (dir_x * 3.2, dir_y * 3.2)
+                        } else {
+                            (dir_x * 0.82, dir_y * 0.82)
+                        }
+                    }
+                    EnemyKind::BossBurst => {
+                        let preferred_dist = 88.0;
+                        let advance = if dist > preferred_dist + 16.0 {
+                            0.52
+                        } else if dist < preferred_dist - 10.0 {
+                            -0.34
+                        } else {
+                            0.0
+                        };
+                        let orbit = sinf(enemy.phase as f32 * 0.010) * 0.64;
+                        if enemy.attack_timer_ms == 0 && queued_shot_count < MAX_ENEMIES {
+                            queued_shots[queued_shot_count] =
+                                Some((enemy.kind, enemy.x, enemy.y, atan2f(dy, dx)));
+                            queued_shot_count += 1;
+                            enemy.attack_timer_ms = 600 + (enemy.phase % 120);
+                        }
+                        (
+                            dir_x * advance + perp_x * orbit,
+                            dir_y * advance + perp_y * orbit,
+                        )
+                    }
+                    EnemyKind::BossNest => {
+                        let preferred_dist = 92.0;
+                        let advance = if dist > preferred_dist + 12.0 {
+                            0.42
+                        } else if dist < preferred_dist - 12.0 {
+                            -0.28
+                        } else {
+                            0.0
+                        };
+                        let orbit = sinf(enemy.phase as f32 * 0.009) * 0.42;
+                        if enemy.attack_timer_ms == 0
+                            && enemy.charges > 0
+                            && queued_summon_count < MAX_ENEMIES
+                        {
+                            queued_summons[queued_summon_count] =
+                                Some((enemy.x, enemy.y, enemy.phase, true));
+                            queued_summon_count += 1;
+                            enemy.attack_timer_ms = 760 + (enemy.phase % 160);
+                            enemy.charges = enemy.charges.saturating_sub(1);
+                        }
+                        (
+                            dir_x * advance + perp_x * orbit,
+                            dir_y * advance + perp_y * orbit,
+                        )
+                    }
+                    EnemyKind::BossRing => {
+                        let preferred_dist = 94.0;
+                        let advance = if dist > preferred_dist + 12.0 {
+                            0.42
+                        } else if dist < preferred_dist - 12.0 {
+                            -0.26
+                        } else {
+                            0.0
+                        };
+                        let orbit = sinf(enemy.phase as f32 * 0.008) * 0.58;
+                        if enemy.attack_timer_ms == 0 && queued_shot_count < MAX_ENEMIES {
+                            queued_shots[queued_shot_count] =
+                                Some((enemy.kind, enemy.x, enemy.y, atan2f(dy, dx)));
+                            queued_shot_count += 1;
+                            enemy.attack_timer_ms = 760 + (enemy.phase % 140);
                         }
                         (
                             dir_x * advance + perp_x * orbit,
@@ -252,23 +539,62 @@ impl AutoBattleApp {
                 && enemy.touch_timer_ms == 0
                 && self.hit_invuln_ms == 0
             {
-                self.health -= 1;
+                self.health -= if enemy.kind.is_boss() { 2 } else { 1 };
                 self.hit_invuln_ms = self.hit_invuln_base_ms;
+                self.damage_flash_ms = DAMAGE_FLASH_MS;
                 enemy.touch_timer_ms = ENEMY_TOUCH_DAMAGE_MS;
             }
         }
 
         for shot in queued_shots.into_iter().flatten() {
-            self.spawn_enemy_projectile(shot.0, shot.1, shot.2);
+            match shot.0 {
+                EnemyKind::Shooter => {
+                    self.spawn_enemy_projectile(shot.1, shot.2, shot.3, 1, ENEMY_PROJECTILE_SPEED);
+                }
+                EnemyKind::BossBurst => {
+                    self.spawn_enemy_projectile(
+                        shot.1,
+                        shot.2,
+                        shot.3 - 0.22,
+                        1,
+                        ENEMY_PROJECTILE_SPEED + 0.01,
+                    );
+                    self.spawn_enemy_projectile(
+                        shot.1,
+                        shot.2,
+                        shot.3,
+                        1,
+                        ENEMY_PROJECTILE_SPEED + 0.01,
+                    );
+                    self.spawn_enemy_projectile(
+                        shot.1,
+                        shot.2,
+                        shot.3 + 0.22,
+                        1,
+                        ENEMY_PROJECTILE_SPEED + 0.01,
+                    );
+                }
+                EnemyKind::BossRing => {
+                    for index in 0..6 {
+                        let angle = shot.3 + index as f32 * 1.047;
+                        self.spawn_enemy_projectile(
+                            shot.1,
+                            shot.2,
+                            angle,
+                            1,
+                            ENEMY_PROJECTILE_SPEED,
+                        );
+                    }
+                }
+                _ => {}
+            }
         }
         for summon in queued_summons.into_iter().flatten() {
-            self.spawn_summoned_runner(summon.0, summon.1, summon.2);
+            let _ = self.spawn_summoned_runner(summon.0, summon.1, summon.2, summon.3);
         }
     }
 
     fn update_projectiles(&mut self, dt_ms: u16) {
-        let mut respawns = 0u8;
-
         for projectile in &mut self.projectiles {
             if !projectile.active {
                 continue;
@@ -299,6 +625,7 @@ impl AutoBattleApp {
                     if self.hit_invuln_ms == 0 {
                         self.health -= projectile.damage;
                         self.hit_invuln_ms = self.hit_invuln_base_ms;
+                        self.damage_flash_ms = DAMAGE_FLASH_MS;
                     }
                 }
                 continue;
@@ -323,294 +650,49 @@ impl AutoBattleApp {
                     if enemy.hp <= 0 {
                         enemy.active = false;
                         self.kills = self.kills.saturating_add(1);
-                        respawns = respawns.saturating_add(1);
+                        self.wave_tracker.remaining_to_kill =
+                            self.wave_tracker.remaining_to_kill.saturating_sub(1);
                     }
                     break;
                 }
             }
         }
 
-        self.sync_best_kills();
-
-        for _ in 0..respawns {
-            self.try_spawn_replacement();
-        }
+        self.profile.best_kills = self.profile.best_kills.max(self.kills);
     }
+}
 
-    fn fire_at_nearest_enemy(&mut self) {
-        let Some((enemy_index, angle)) = self.nearest_enemy_angle() else {
-            return;
-        };
-        if !self.enemies[enemy_index].active {
-            return;
-        }
-
-        let shot_count = self.projectile_count.max(1) as i32;
-        let spread = 0.15f32;
-        let mid = (shot_count - 1) as f32 * 0.5;
-
-        for shot_idx in 0..shot_count {
-            let Some(projectile) = self.projectiles.iter_mut().find(|shot| !shot.active) else {
-                break;
-            };
-            let offset = (shot_idx as f32 - mid) * spread;
-            let shot_angle = angle + offset;
-            projectile.active = true;
-            projectile.from_enemy = false;
-            projectile.x = self.player_x;
-            projectile.y = self.player_y;
-            projectile.vx = cosf(shot_angle) * self.projectile_speed;
-            projectile.vy = sinf(shot_angle) * self.projectile_speed;
-            projectile.damage = self.bullet_damage;
-            projectile.pierce_left = self.projectile_pierce;
-            projectile.ttl_ms = self.projectile_ttl_ms;
-        }
-
-        self.shot_cooldown_ms = self.shot_cooldown_base_ms;
-    }
-
-    fn try_spawn_replacement(&mut self) {
-        if self.kills >= TARGET_KILLS || matches!(self.state, BattleState::LevelUp) {
-            return;
-        }
-        let Some(slot_index) = self.enemies.iter().position(|enemy| !enemy.active) else {
-            return;
-        };
-
-        let spawn = SPAWN_POINTS[(self.next_rand() as usize) % SPAWN_POINTS.len()];
-        let tier = (self.kills / 20) as i16;
-        let phase = (self.next_rand() & 0xFFFF) as u16;
-        let kind = self.roll_enemy_kind();
-        self.enemies[slot_index] = self.build_enemy(kind, spawn, tier, phase);
-    }
-
-    pub(super) fn spawn_opening_wave(&mut self) {
-        let opening_kinds = [
-            EnemyKind::Runner,
-            EnemyKind::Runner,
-            EnemyKind::Bruiser,
-            EnemyKind::Runner,
-            EnemyKind::Shooter,
-            EnemyKind::Dasher,
-            EnemyKind::Bruiser,
-            EnemyKind::Summoner,
-        ];
-        for index in 0..self.enemies.len() {
-            let spawn = SPAWN_POINTS[index];
-            self.enemies[index] =
-                self.build_enemy(opening_kinds[index], spawn, 0, (index as u16) * 73);
-        }
-    }
-
-    fn spawn_enemy_projectile(&mut self, x: f32, y: f32, angle: f32) {
-        let Some(projectile) = self.projectiles.iter_mut().find(|shot| !shot.active) else {
-            return;
-        };
-
-        projectile.active = true;
-        projectile.from_enemy = true;
-        projectile.x = x;
-        projectile.y = y;
-        projectile.vx = cosf(angle) * ENEMY_PROJECTILE_SPEED;
-        projectile.vy = sinf(angle) * ENEMY_PROJECTILE_SPEED;
-        projectile.damage = 1;
-        projectile.pierce_left = 0;
-        projectile.ttl_ms = 1_200;
-    }
-
-    fn spawn_summoned_runner(&mut self, x: f32, y: f32, phase: u16) {
-        let Some(slot_index) = self.enemies.iter().position(|enemy| !enemy.active) else {
-            return;
-        };
-
-        let angle = (phase as f32 * 0.024) + ((self.next_rand() & 0x1F) as f32 * 0.08);
-        let offset = 18.0 + (self.next_rand() & 0x7) as f32;
-        let spawn = (
-            (x + cosf(angle) * offset).clamp(14.0, ARENA_W as f32 - 14.0),
-            (y + sinf(angle) * offset).clamp(14.0, ARENA_H as f32 - 14.0),
-        );
-        self.enemies[slot_index] =
-            self.build_enemy(EnemyKind::Runner, spawn, self.kills as i16 / 24, phase);
-        self.enemies[slot_index].phase = phase.wrapping_add(111);
-        self.enemies[slot_index].flash_ms = 90;
-    }
-
-    fn roll_enemy_kind(&mut self) -> EnemyKind {
-        let roll = (self.next_rand() % 100) as u8;
-        if self.level < 3 {
-            if roll < 42 {
-                EnemyKind::Runner
-            } else if roll < 66 {
-                EnemyKind::Bruiser
-            } else if roll < 88 {
-                EnemyKind::Shooter
-            } else {
-                EnemyKind::Dasher
-            }
-        } else if self.level < 6 {
-            if roll < 32 {
-                EnemyKind::Runner
-            } else if roll < 54 {
-                EnemyKind::Bruiser
-            } else if roll < 74 {
-                EnemyKind::Shooter
-            } else if roll < 90 {
-                EnemyKind::Dasher
-            } else {
-                EnemyKind::Summoner
-            }
-        } else if roll < 24 {
-            EnemyKind::Runner
-        } else if roll < 44 {
-            EnemyKind::Bruiser
-        } else if roll < 64 {
-            EnemyKind::Shooter
-        } else if roll < 82 {
-            EnemyKind::Dasher
-        } else {
-            EnemyKind::Summoner
-        }
-    }
-
-    fn build_enemy(&self, kind: EnemyKind, spawn: (f32, f32), tier: i16, phase: u16) -> Enemy {
-        let level_boost = self.level as i16 / 3;
-        let (hp, speed, size, attack_timer_ms) = match kind {
-            EnemyKind::Runner => (
-                2 + level_boost + tier / 2,
-                0.0155 + self.level as f32 * 0.0008 + tier as f32 * 0.0005,
-                10 + (self.level as u16 / 4).min(2),
-                0,
-            ),
-            EnemyKind::Shooter => (
-                3 + level_boost + tier / 2,
-                0.0118 + self.level as f32 * 0.0005 + tier as f32 * 0.0003,
-                11 + (self.level as u16 / 5).min(2),
-                620 + (phase % 260),
-            ),
-            EnemyKind::Bruiser => (
-                5 + level_boost + tier,
-                0.0108 + self.level as f32 * 0.0004 + tier as f32 * 0.0003,
-                14 + ((self.level as u16 + self.kills / 28) / 5).min(4),
-                0,
-            ),
-            EnemyKind::Dasher => (
-                3 + level_boost + tier / 2,
-                0.0126 + self.level as f32 * 0.0006 + tier as f32 * 0.0004,
-                10 + (self.level as u16 / 4).min(3),
-                420 + (phase % 220),
-            ),
-            EnemyKind::Summoner => (
-                4 + level_boost + tier,
-                0.0102 + self.level as f32 * 0.0003 + tier as f32 * 0.0002,
-                12 + (self.level as u16 / 6).min(3),
-                1_100 + (phase % 320),
-            ),
-        };
-
-        Enemy {
-            active: true,
-            kind,
-            x: spawn.0,
-            y: spawn.1,
-            hp,
-            max_hp: hp,
-            speed,
-            size,
-            touch_timer_ms: 0,
-            attack_timer_ms,
-            burst_timer_ms: 0,
-            flash_ms: 0,
-            phase,
-        }
-    }
-
-    pub(super) fn nearest_enemy_position(&self) -> Option<(f32, f32)> {
-        let mut best = None;
-        let mut best_dist = f32::MAX;
-        for enemy in &self.enemies {
-            if !enemy.active {
-                continue;
-            }
-            let dx = enemy.x - self.player_x;
-            let dy = enemy.y - self.player_y;
-            let dist_sq = dx * dx + dy * dy;
-            if dist_sq < best_dist {
-                best_dist = dist_sq;
-                best = Some((enemy.x, enemy.y));
-            }
-        }
-        best
-    }
-
-    fn nearest_enemy_angle(&self) -> Option<(usize, f32)> {
-        let mut best = None;
-        let mut best_dist = f32::MAX;
-        for (index, enemy) in self.enemies.iter().enumerate() {
-            if !enemy.active {
-                continue;
-            }
-            let dx = enemy.x - self.player_x;
-            let dy = enemy.y - self.player_y;
-            let dist_sq = dx * dx + dy * dy;
-            if dist_sq < best_dist {
-                best_dist = dist_sq;
-                best = Some((index, atan2f(dy, dx)));
-            }
-        }
-        best
-    }
-
-    fn roll_level_up_choices(&mut self) {
-        let mut selected = [BuffKind::MultiShot; LEVEL_UP_CHOICES];
-        let mut count = 0usize;
-        while count < LEVEL_UP_CHOICES {
-            let candidate = ALL_BUFFS[(self.next_rand() as usize) % ALL_BUFFS.len()];
-            if selected[..count].contains(&candidate) {
-                continue;
-            }
-            selected[count] = candidate;
-            count += 1;
-        }
-        self.level_up_choices = selected;
-    }
-
-    fn apply_buff(&mut self, buff: BuffKind) {
-        self.buff_counts[buff.index()] = self.buff_counts[buff.index()].saturating_add(1);
-        match buff {
-            BuffKind::MultiShot => {
-                self.projectile_count = (self.projectile_count + 1).min(4);
-            }
-            BuffKind::VitalCore => {
-                self.max_health += 2;
-                self.health = (self.health + 2).min(self.max_health);
-            }
-            BuffKind::Impact => {
-                self.bullet_damage += 1;
-            }
-            BuffKind::QuickTrigger => {
-                self.shot_cooldown_base_ms = self.shot_cooldown_base_ms.saturating_sub(40).max(110);
-            }
-            BuffKind::Velocity => {
-                self.projectile_speed += 0.028;
-            }
-            BuffKind::Thrusters => {
-                self.player_speed = (self.player_speed + 0.011).min(0.145);
-            }
-            BuffKind::PhaseRound => {
-                self.projectile_pierce = (self.projectile_pierce + 1).min(3);
-            }
-            BuffKind::LongBarrel => {
-                self.projectile_ttl_ms = (self.projectile_ttl_ms + 160).min(1_600);
-            }
-            BuffKind::GuardShell => {
-                self.hit_invuln_base_ms = (self.hit_invuln_base_ms + 110).min(900);
-                self.health = (self.health + 1).min(self.max_health);
-            }
-        }
-
-        self.level = self.level.saturating_add(1);
-        self.next_level_kills = self.next_level_kills.saturating_add(KILLS_PER_LEVEL);
-        self.state = BattleState::Running;
-        self.request_redraw(AutoBattleRedraw::Full);
+fn profile_action_rect(action: ProfileAction) -> (u16, u16, u16, u16) {
+    match action {
+        ProfileAction::Attack => (
+            PROFILE_LEFT_X,
+            PROFILE_TOP_Y,
+            PROFILE_CARD_W,
+            PROFILE_CARD_H,
+        ),
+        ProfileAction::Vitality => (
+            PROFILE_RIGHT_X,
+            PROFILE_TOP_Y,
+            PROFILE_CARD_W,
+            PROFILE_CARD_H,
+        ),
+        ProfileAction::Trigger => (
+            PROFILE_LEFT_X,
+            PROFILE_BOTTOM_Y,
+            PROFILE_CARD_W,
+            PROFILE_CARD_H,
+        ),
+        ProfileAction::Thrusters => (
+            PROFILE_RIGHT_X,
+            PROFILE_BOTTOM_Y,
+            PROFILE_CARD_W,
+            PROFILE_CARD_H,
+        ),
+        ProfileAction::Deploy => (
+            PROFILE_DEPLOY_X,
+            PROFILE_DEPLOY_Y,
+            PROFILE_DEPLOY_W,
+            PROFILE_DEPLOY_H,
+        ),
     }
 }

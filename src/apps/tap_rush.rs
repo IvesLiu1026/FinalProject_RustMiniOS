@@ -110,20 +110,20 @@ impl TapRushApp {
         display.panel(14, 10, 292, 34, ui.panel, ui.amber);
         render_nav_back(display, zh_mode, ui.white, &ui);
         display.text(
-            74,
+            84,
             18,
             if zh_mode { "點擊衝刺" } else { "TAP RUSH" },
             ui.text,
             ui.panel,
-            2,
+            1,
         );
         display.text(
-            166,
+            158,
             20,
             if zh_mode {
-                "20 秒內盡量點亮目標"
+                "20 秒熱點挑戰"
             } else {
-                "HIT THE HOT TILE AS MANY TIMES AS YOU CAN"
+                "20 SEC HOT TILE RUN"
             },
             ui.text_muted,
             ui.panel,
