@@ -348,4 +348,6 @@ export PLATFORMIO_PACKAGES_DIR=/your/path/to/.platformio/packages
 - storage / flash diagnostics note: [docs/storage-diagnostics-notes.md](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/docs/storage-diagnostics-notes.md)
 - flash usage analysis: [docs/flash-usage-analysis-2026-03-16.md](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/docs/flash-usage-analysis-2026-03-16.md)
 - Mac companion setup note: [docs/mac-companion.md](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/docs/mac-companion.md)
+- final report notes: [docs/final-report-notes-2026-03-16.md](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/docs/final-report-notes-2026-03-16.md)
+- final presentation outline: [docs/final-presentation-outline-2026-03-16.md](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/docs/final-presentation-outline-2026-03-16.md)
 - repo module boundary note: [docs/repo-architecture.md](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/docs/repo-architecture.md)
