@@ -250,7 +250,10 @@ fn samples_plausible(sample_x: u16, sample_y: u16) -> bool {
 fn apply_affine(raw_x: u16, raw_y: u16, calibration: &TouchCalibration) -> (u16, u16) {
     let x = calibration.ax * raw_x as f32 + calibration.bx * raw_y as f32 + calibration.cx;
     let y = calibration.ay * raw_x as f32 + calibration.by * raw_y as f32 + calibration.cy;
-    (clamp_screen(x, SCREEN_WIDTH - 1), clamp_screen(y, SCREEN_HEIGHT - 1))
+    (
+        clamp_screen(x, SCREEN_WIDTH - 1),
+        clamp_screen(y, SCREEN_HEIGHT - 1),
+    )
 }
 
 fn clamp_screen(value: f32, max_value: u16) -> u16 {

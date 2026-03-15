@@ -23,13 +23,11 @@ pub struct SpriteAsset {
     pub height: usize,
 }
 
-const WALL_LIGHT: &[u8] =
-    include_bytes!("../assets/converted/textures/wall_light.rgb565");
+const WALL_LIGHT: &[u8] = include_bytes!("../assets/converted/textures/wall_light.rgb565");
 const WALL_MID: &[u8] = include_bytes!("../assets/converted/textures/wall_mid.rgb565");
 const WALL_DARK: &[u8] = include_bytes!("../assets/converted/textures/wall_dark.rgb565");
 const DOOR_DARK: &[u8] = include_bytes!("../assets/converted/textures/door_dark.rgb565");
-const WINDOW_DARK: &[u8] =
-    include_bytes!("../assets/converted/textures/window_dark.rgb565");
+const WINDOW_DARK: &[u8] = include_bytes!("../assets/converted/textures/window_dark.rgb565");
 
 const IMP_RGB565: &[u8] = include_bytes!("../assets/converted/sprites/imp.rgb565");
 const IMP_MASK: &[u8] = include_bytes!("../assets/converted/sprites/imp.mask");

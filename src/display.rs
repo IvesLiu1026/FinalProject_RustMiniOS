@@ -181,6 +181,109 @@ impl Display {
         }
     }
 
+    pub fn draw_rgb565_scaled(
+        &mut self,
+        x: u16,
+        y: u16,
+        width: u16,
+        height: u16,
+        scale: u16,
+        data: &[u16],
+    ) {
+        if width == 0 || height == 0 || scale == 0 {
+            return;
+        }
+
+        let expected = width as usize * height as usize;
+        if data.len() < expected {
+            return;
+        }
+
+        let scaled_width = width.saturating_mul(scale);
+        if scaled_width == 0 || scaled_width as usize > SCREEN_WIDTH as usize {
+            return;
+        }
+
+        let mut row_buffer = [0u16; SCREEN_WIDTH as usize];
+        let row_width = scaled_width as usize;
+        let src_width = width as usize;
+
+        for src_y in 0..height as usize {
+            let src_row = src_y * src_width;
+            let mut out_x = 0usize;
+            for src_x in 0..src_width {
+                let pixel = data[src_row + src_x];
+                for _ in 0..scale {
+                    row_buffer[out_x] = pixel;
+                    out_x += 1;
+                }
+            }
+
+            let dest_y = y.saturating_add(src_y as u16 * scale);
+            for repeat in 0..scale {
+                self.draw_rgb565(
+                    x,
+                    dest_y.saturating_add(repeat),
+                    scaled_width,
+                    1,
+                    &row_buffer[..row_width],
+                );
+            }
+        }
+    }
+
+    pub fn draw_rgb565_scaled_bytes(
+        &mut self,
+        x: u16,
+        y: u16,
+        width: u16,
+        height: u16,
+        scale: u16,
+        data: &[u8],
+    ) {
+        if width == 0 || height == 0 || scale == 0 {
+            return;
+        }
+
+        let expected = width as usize * height as usize * 2;
+        if data.len() < expected {
+            return;
+        }
+
+        let scaled_width = width.saturating_mul(scale);
+        if scaled_width == 0 || scaled_width as usize > SCREEN_WIDTH as usize {
+            return;
+        }
+
+        let mut row_buffer = [0u16; SCREEN_WIDTH as usize];
+        let row_width = scaled_width as usize;
+        let src_width = width as usize;
+
+        for src_y in 0..height as usize {
+            let src_row = src_y * src_width * 2;
+            let mut out_x = 0usize;
+            for src_x in 0..src_width {
+                let byte = src_row + src_x * 2;
+                let pixel = u16::from_le_bytes([data[byte], data[byte + 1]]);
+                for _ in 0..scale {
+                    row_buffer[out_x] = pixel;
+                    out_x += 1;
+                }
+            }
+
+            let dest_y = y.saturating_add(src_y as u16 * scale);
+            for repeat in 0..scale {
+                self.draw_rgb565(
+                    x,
+                    dest_y.saturating_add(repeat),
+                    scaled_width,
+                    1,
+                    &row_buffer[..row_width],
+                );
+            }
+        }
+    }
+
     pub fn stroke_rect(
         &mut self,
         x: u16,

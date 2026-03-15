@@ -1,0 +1,531 @@
+use super::*;
+
+impl MiniOs {
+    pub fn update_frame_timing(&mut self, frame_dt_ms: u32) {
+        let instant_fps = (1000u32 / frame_dt_ms.max(1)).min(99) as u16;
+        self.fps_estimate = if self.fps_estimate == 0 {
+            instant_fps
+        } else {
+            (((self.fps_estimate as u32 * 7) + instant_fps as u32) / 8) as u16
+        };
+    }
+
+    pub fn update(
+        &mut self,
+        board: &mut Board,
+        input: &ButtonSnapshot,
+        touch: &TouchState,
+        touch_driver: &mut Touch,
+        dt_ms: u32,
+    ) -> bool {
+        let mut dirty = false;
+        match self.screen {
+            Screen::Home => {
+                let home_app_count = home_apps().len();
+                if input.k0_just_pressed {
+                    self.home_index =
+                        self.home_index.wrapping_add(home_app_count - 1) % home_app_count;
+                    dirty = true;
+                }
+                if input.wkup_just_pressed {
+                    self.home_index = (self.home_index + 1) % home_app_count;
+                    dirty = true;
+                }
+                if input.k1_just_pressed {
+                    self.open_selected_screen();
+                    dirty = true;
+                }
+
+                if touch.just_released {
+                    for index in 0..home_app_count {
+                        let y = 64 + index as u16 * 39;
+                        if touch_started_in_rect(touch, 20, y, 280, 35) {
+                            if self.home_index == index {
+                                self.open_selected_screen();
+                            } else {
+                                self.home_index = index;
+                            }
+                            dirty = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            Screen::Album => {
+                match self.album.update(input, touch, dt_ms) {
+                    AlbumAction::ExitHome => {
+                        self.save_storage();
+                        self.switch_screen(Screen::Home);
+                        return true;
+                    }
+                    AlbumAction::Stay => {}
+                }
+                self.album_redraw = self.album.take_redraw_request();
+                dirty = self.album_redraw.is_some();
+            }
+            Screen::GameCenter => {
+                match self.game_center.update(input, touch) {
+                    GameCenterAction::Launch(app_id) => {
+                        self.launch_app(app_id);
+                        return true;
+                    }
+                    GameCenterAction::ExitHome => {
+                        self.switch_screen(Screen::Home);
+                        return true;
+                    }
+                    GameCenterAction::Stay => {}
+                }
+                dirty = input.k0_just_pressed || input.wkup_just_pressed || touch.just_released;
+            }
+            Screen::MapSelect => {
+                if input.k0_just_pressed {
+                    self.map_index = self.map_index.wrapping_add(DungeonApp::map_count() - 1)
+                        % DungeonApp::map_count();
+                    dirty = true;
+                }
+                if input.wkup_just_pressed {
+                    self.map_index = (self.map_index + 1) % DungeonApp::map_count();
+                    dirty = true;
+                }
+                if input.k1_just_pressed {
+                    self.launch_map();
+                    return true;
+                }
+                if input.home_chord() {
+                    self.switch_screen(Screen::GameCenter);
+                    return true;
+                }
+                if touch.just_released {
+                    if touch_started_in_rect(touch, NAV_BACK_X, NAV_BACK_Y, NAV_BACK_W, NAV_BACK_H)
+                    {
+                        self.switch_screen(Screen::GameCenter);
+                        return true;
+                    }
+                    for index in 0..DungeonApp::map_count() {
+                        let y = 72 + index as u16 * 44;
+                        if touch_started_in_rect(touch, 20, y, 280, 36) {
+                            if self.map_index == index {
+                                self.launch_map();
+                            } else {
+                                self.map_index = index;
+                            }
+                            return true;
+                        }
+                    }
+                    if touch_started_in_rect(touch, 22, 208, 276, 20) {
+                        self.switch_screen(Screen::GameCenter);
+                        return true;
+                    }
+                }
+            }
+            Screen::Settings => {
+                if input.home_chord() {
+                    self.switch_screen(Screen::Home);
+                    return true;
+                }
+
+                if input.k0_just_pressed {
+                    self.settings_index =
+                        (self.settings_index + SETTINGS_ITEM_COUNT - 1) % SETTINGS_ITEM_COUNT;
+                    dirty = true;
+                }
+                if input.wkup_just_pressed {
+                    self.settings_index = (self.settings_index + 1) % SETTINGS_ITEM_COUNT;
+                    dirty = true;
+                }
+                if input.k1_just_pressed {
+                    return self.activate_settings_item();
+                }
+                if touch.just_released {
+                    if touch_started_in_rect(touch, NAV_BACK_X, NAV_BACK_Y, NAV_BACK_W, NAV_BACK_H)
+                    {
+                        self.switch_screen(Screen::Home);
+                        return true;
+                    }
+                    for index in 0..SETTINGS_ITEM_COUNT {
+                        let y = 52 + index as u16 * 25;
+                        if touch_started_in_rect(touch, 20, y, 280, 24) {
+                            if self.settings_index == index {
+                                return self.activate_settings_item();
+                            }
+                            self.settings_index = index;
+                            dirty = true;
+                            break;
+                        }
+                    }
+                    if touch_started_in_rect(touch, 22, 226, 276, 12) {
+                        self.switch_screen(Screen::Home);
+                        return true;
+                    }
+                }
+            }
+            Screen::About => {
+                if input.home_chord() {
+                    self.switch_screen(Screen::Settings);
+                    return true;
+                }
+                if touch.just_released
+                    && touch_started_in_rect(touch, NAV_BACK_X, NAV_BACK_Y, NAV_BACK_W, NAV_BACK_H)
+                {
+                    self.switch_screen(Screen::Settings);
+                    return true;
+                }
+            }
+            Screen::Diagnostics => {
+                if input.home_chord() {
+                    self.switch_screen(self.diagnostics_return_screen);
+                    return true;
+                }
+                if input.k0_just_pressed {
+                    self.select_diagnostics_action(
+                        self.diagnostics_action_index + DIAG_ACTION_COUNT - 1,
+                    );
+                    dirty = true;
+                }
+                if input.wkup_just_pressed {
+                    self.select_diagnostics_action(self.diagnostics_action_index + 1);
+                    dirty = true;
+                }
+                if input.k1_just_pressed {
+                    return self.activate_diagnostics_action(touch_driver);
+                }
+                if touch.just_released {
+                    if touch_started_in_rect(touch, NAV_BACK_X, NAV_BACK_Y, NAV_BACK_W, NAV_BACK_H)
+                    {
+                        self.switch_screen(self.diagnostics_return_screen);
+                        return true;
+                    }
+                    if touch_started_in_rect(
+                        touch,
+                        DIAG_CLEAR_X,
+                        DIAG_ACTION_Y,
+                        DIAG_ACTION_W,
+                        DIAG_ACTION_H,
+                    ) {
+                        if self.diagnostics_action_index == 0 {
+                            return self.activate_diagnostics_action(touch_driver);
+                        }
+                        self.select_diagnostics_action(0);
+                        dirty = true;
+                    } else if touch_started_in_rect(
+                        touch,
+                        DIAG_RESET_X,
+                        DIAG_ACTION_Y,
+                        DIAG_ACTION_W,
+                        DIAG_ACTION_H,
+                    ) {
+                        if self.diagnostics_action_index == 1 {
+                            return self.activate_diagnostics_action(touch_driver);
+                        }
+                        self.select_diagnostics_action(1);
+                        dirty = true;
+                    }
+                }
+            }
+            Screen::SafeMode => {
+                const SAFE_MODE_COUNT: usize = 3;
+                if input.k0_just_pressed {
+                    self.safe_mode_index =
+                        (self.safe_mode_index + SAFE_MODE_COUNT - 1) % SAFE_MODE_COUNT;
+                    dirty = true;
+                }
+                if input.wkup_just_pressed {
+                    self.safe_mode_index = (self.safe_mode_index + 1) % SAFE_MODE_COUNT;
+                    dirty = true;
+                }
+                if input.k1_just_pressed {
+                    return self.activate_safe_mode_item();
+                }
+                if touch.just_released {
+                    for index in 0..SAFE_MODE_COUNT {
+                        let y = 110 + index as u16 * 34;
+                        if touch_started_in_rect(touch, 18, y, 284, 28) {
+                            if self.safe_mode_index == index {
+                                return self.activate_safe_mode_item();
+                            }
+                            self.safe_mode_index = index;
+                            dirty = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            Screen::TouchCalibrate => {
+                if self.touch_ready && (input.k0_just_pressed || input.home_chord()) {
+                    self.return_from_touch_calibration();
+                    return true;
+                }
+                if touch.just_released {
+                    if self.touch_ready
+                        && touch_started_in_rect(
+                            touch, NAV_BACK_X, NAV_BACK_Y, NAV_BACK_W, NAV_BACK_H,
+                        )
+                    {
+                        self.return_from_touch_calibration();
+                        return true;
+                    }
+                    dirty = true;
+                    let index = self.calibration_step as usize;
+                    if index < 5 {
+                        self.calibration_raw_x[index] = touch.raw_x;
+                        self.calibration_raw_y[index] = touch.raw_y;
+                        self.calibration_step = self.calibration_step.saturating_add(1);
+                    }
+
+                    if self.calibration_step >= 5 {
+                        if self.commit_touch_calibration(touch_driver) {
+                            self.return_from_touch_calibration();
+                        } else {
+                            self.calibration_step = 0;
+                            self.calibration_raw_x = [0; 5];
+                            self.calibration_raw_y = [0; 5];
+                            self.force_full_redraw = true;
+                        }
+                    }
+                }
+            }
+            Screen::ControlRoom => {
+                if input.k1_just_pressed {
+                    board.toggle_led();
+                    dirty = true;
+                }
+                if touch.just_released {
+                    if touch_started_in_rect(touch, NAV_BACK_X, NAV_BACK_Y, NAV_BACK_W, NAV_BACK_H)
+                    {
+                        self.switch_screen(Screen::Settings);
+                        return true;
+                    }
+                    if touch_started_in_rect(touch, 18, 56, 284, 70)
+                        || touch_started_in_rect(touch, 20, 138, 85, 52)
+                    {
+                        board.toggle_led();
+                        dirty = true;
+                    } else if touch_started_in_rect(touch, 18, 206, 284, 24) {
+                        self.switch_screen(Screen::Settings);
+                        return true;
+                    }
+                }
+                if input.home_chord() {
+                    self.switch_screen(Screen::Settings);
+                    return true;
+                }
+                let uptime_second = millis() / 1000;
+                if uptime_second != self.last_uptime_second {
+                    self.last_uptime_second = uptime_second;
+                    dirty = true;
+                }
+            }
+            Screen::DungeonCore => {
+                match self.dungeon.update(input, touch, dt_ms) {
+                    DungeonAction::ExitHome => {
+                        self.switch_screen(Screen::GameCenter);
+                        return true;
+                    }
+                    DungeonAction::OpenMapSelect => {
+                        self.switch_screen(Screen::MapSelect);
+                        return true;
+                    }
+                    DungeonAction::Stay => {}
+                }
+                dirty = self.dungeon.needs_animation()
+                    || self.dungeon.take_redraw_request()
+                    || input.k0_just_pressed
+                    || input.k1_just_pressed
+                    || input.wkup_just_pressed
+                    || input.home_chord()
+                    || touch.just_pressed
+                    || touch.just_released;
+            }
+            Screen::Paint => {
+                match self.paint.update(input, touch) {
+                    PaintAction::ExitHome => {
+                        self.save_storage();
+                        self.switch_screen(Screen::Home);
+                        return true;
+                    }
+                    PaintAction::Stay => {}
+                }
+                self.paint_redraw = self.paint.take_redraw_request();
+                dirty = self.paint_redraw.is_some();
+            }
+            Screen::AutoBattle => {
+                match self.auto_battle.update(input, touch, dt_ms) {
+                    AutoBattleAction::ExitGameCenter => {
+                        self.save_storage();
+                        self.switch_screen(Screen::GameCenter);
+                        return true;
+                    }
+                    AutoBattleAction::Stay => {}
+                }
+                self.auto_battle_redraw = self.auto_battle.take_redraw_request();
+                dirty = self.auto_battle_redraw.is_some();
+            }
+            Screen::TapRush => {
+                match self.tap_rush.update(input, touch, dt_ms) {
+                    TapRushAction::ExitGameCenter => {
+                        self.save_storage();
+                        self.switch_screen(Screen::GameCenter);
+                        return true;
+                    }
+                    TapRushAction::Stay => {}
+                }
+                dirty = self.tap_rush.needs_animation() || self.tap_rush.take_redraw_request();
+            }
+        }
+        dirty
+    }
+
+    fn open_control_room(&mut self) {
+        self.last_uptime_second = millis() / 1000;
+        self.switch_screen(Screen::ControlRoom);
+    }
+
+    fn toggle_theme(&mut self) {
+        self.theme = match self.theme {
+            ThemeMode::Dark => ThemeMode::Light,
+            ThemeMode::Light => ThemeMode::Dark,
+        };
+        let _ = self.save_storage();
+        self.force_full_redraw = true;
+    }
+
+    fn open_selected_screen(&mut self) {
+        if let Some(app_id) = home_apps().get(self.home_index).copied() {
+            self.launch_app(app_id);
+        }
+    }
+
+    fn launch_app(&mut self, app_id: AppId) {
+        self.recent_app = Some(app_id);
+        self.home_index = app_registry::home_slot_for_app(app_id);
+        self.game_center.select_app(app_id);
+        let _ = self.save_storage();
+        match app_id {
+            AppId::Album => self.switch_screen(Screen::Album),
+            AppId::GameCenter => self.switch_screen(Screen::GameCenter),
+            AppId::Paint => self.switch_screen(Screen::Paint),
+            AppId::Settings => self.switch_screen(Screen::Settings),
+            AppId::DungeonCore => self.switch_screen(Screen::MapSelect),
+            AppId::AutoBattle => {
+                self.auto_battle.reset();
+                self.switch_screen(Screen::AutoBattle);
+            }
+            AppId::TapRush => self.switch_screen(Screen::TapRush),
+        }
+    }
+
+    fn launch_map(&mut self) {
+        self.dungeon.set_map(self.map_index);
+        self.switch_screen(Screen::DungeonCore);
+    }
+
+    fn activate_settings_item(&mut self) -> bool {
+        match self.settings_index {
+            0 => {
+                self.toggle_theme();
+                true
+            }
+            1 => {
+                self.language.toggle();
+                let _ = self.save_storage();
+                true
+            }
+            2 => {
+                self.render_strategy = self.render_strategy.next();
+                let _ = self.save_storage();
+                true
+            }
+            3 => {
+                self.open_control_room();
+                true
+            }
+            4 => {
+                self.enter_touch_calibration(Screen::Settings);
+                true
+            }
+            5 => {
+                self.diagnostics_return_screen = Screen::Settings;
+                self.switch_screen(Screen::Diagnostics);
+                true
+            }
+            _ => {
+                self.switch_screen(Screen::About);
+                true
+            }
+        }
+    }
+
+    fn activate_safe_mode_item(&mut self) -> bool {
+        match self.safe_mode_index {
+            0 => {
+                self.switch_screen(Screen::Home);
+                true
+            }
+            1 => {
+                self.enter_touch_calibration(Screen::SafeMode);
+                true
+            }
+            _ => {
+                self.diagnostics_return_screen = Screen::SafeMode;
+                self.switch_screen(Screen::Diagnostics);
+                true
+            }
+        }
+    }
+
+    fn select_diagnostics_action(&mut self, index: usize) {
+        self.diagnostics_action_index = index % DIAG_ACTION_COUNT;
+        self.diagnostics_armed = false;
+        self.diagnostics_notice = None;
+    }
+
+    fn activate_diagnostics_action(&mut self, touch_driver: &mut Touch) -> bool {
+        if self.diagnostics_armed {
+            self.diagnostics_armed = false;
+            match self.diagnostics_action_index {
+                0 => {
+                    if self.clear_app_save_data() {
+                        self.diagnostics_notice = Some(DiagnosticsNotice::Cleared);
+                    } else {
+                        self.diagnostics_notice = Some(DiagnosticsNotice::ClearFailed);
+                    }
+                    self.force_full_redraw = true;
+                    true
+                }
+                _ => {
+                    if self.perform_factory_reset(touch_driver) {
+                        true
+                    } else {
+                        self.diagnostics_notice = Some(DiagnosticsNotice::ResetFailed);
+                        self.force_full_redraw = true;
+                        true
+                    }
+                }
+            }
+        } else {
+            self.diagnostics_armed = true;
+            self.diagnostics_notice = Some(match self.diagnostics_action_index {
+                0 => DiagnosticsNotice::ClearReady,
+                _ => DiagnosticsNotice::ResetReady,
+            });
+            self.force_full_redraw = true;
+            true
+        }
+    }
+}
+
+fn touch_started_in_rect(touch: &TouchState, x: u16, y: u16, width: u16, height: u16) -> bool {
+    if touch.dragging {
+        return false;
+    }
+
+    let tap_x = ((touch.start_x as u32 + touch.release_x as u32) / 2) as u16;
+    let tap_y = ((touch.start_y as u32 + touch.release_y as u32) / 2) as u16;
+    let slop = 10u16;
+    let left = x.saturating_sub(slop);
+    let top = y.saturating_sub(slop);
+    let right = x.saturating_add(width).saturating_add(slop);
+    let bottom = y.saturating_add(height).saturating_add(slop);
+
+    tap_x >= left && tap_x < right && tap_y >= top && tap_y < bottom
+}
