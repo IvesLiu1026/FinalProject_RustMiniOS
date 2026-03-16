@@ -3,20 +3,21 @@ use core::fmt::Write;
 use heapless::String;
 
 use crate::app_registry::descriptor;
-use crate::board::Board;
+use crate::board::{self, Board};
 use crate::display::{color, palette, Display, ThemeMode};
 use crate::dungeon::RenderStrategy;
 use crate::storage::StorageStatus;
 use crate::system_info;
 
 use super::{
-    draw_gradient_background, draw_info_strip, draw_shell_window, draw_title_bar, render_nav_back,
-    DiagnosticsNotice, DIAG_ACTION_H, DIAG_ACTION_W, DIAG_ACTION_Y, DIAG_CLEAR_X, DIAG_RESET_X,
+    draw_gradient_background, draw_info_strip, draw_shell_window, draw_title_bar,
+    fit_text_to_width, render_nav_back, DiagnosticsNotice, DIAG_ACTION_H, DIAG_ACTION_W,
+    DIAG_ACTION_Y, DIAG_CLEAR_X, DIAG_RESET_X,
 };
 
 pub fn render_diagnostics(
     display: &mut Display,
-    board: &Board,
+    _board: &Board,
     theme: ThemeMode,
     zh_mode: bool,
     active_screen: &str,
@@ -89,23 +90,22 @@ pub fn render_diagnostics(
     );
 
     display.panel(18, 74, 136, 108, ui.panel, ui.orange);
-    display.text(
-        28,
-        86,
-        if zh_mode { "系統狀態" } else { "SYSTEM" },
-        ui.text,
-        ui.panel,
-        2,
-    );
+    let system_title =
+        fit_text_to_width(display, if zh_mode { "系統狀態" } else { "SYSTEM" }, 74, 1);
+    display.text(28, 86, &system_title, ui.text, ui.panel, 1);
     draw_runtime_icon(display, 116, 82, &ui);
     draw_info_strip(
         display,
         28,
         106,
         116,
-        if zh_mode { "LED" } else { "LED" },
-        if board.led_on() { "ON" } else { "OFF" },
-        if board.led_on() { ui.lime } else { ui.steel },
+        if zh_mode { "按鍵中斷" } else { "BTN IRQ" },
+        &button_irq_line(),
+        if board::button_exti_pending_mask() != 0 {
+            ui.amber
+        } else {
+            ui.lime
+        },
         &ui,
     );
     draw_info_strip(
@@ -113,18 +113,8 @@ pub fn render_diagnostics(
         28,
         124,
         116,
-        if zh_mode { "觸控" } else { "TOUCH" },
-        if touch_ready {
-            if zh_mode {
-                "已校正"
-            } else {
-                "READY"
-            }
-        } else if zh_mode {
-            "未就緒"
-        } else {
-            "NOT READY"
-        },
+        if zh_mode { "觸控中斷" } else { "TOUCH IRQ" },
+        &touch_irq_line(zh_mode, touch_ready),
         if touch_ready { ui.cyan } else { ui.rose },
         &ui,
     );
@@ -160,14 +150,9 @@ pub fn render_diagnostics(
     );
 
     display.panel(166, 74, 136, 108, ui.panel, ui.lime);
-    display.text(
-        176,
-        86,
-        if zh_mode { "儲存狀態" } else { "STORAGE" },
-        ui.text,
-        ui.panel,
-        2,
-    );
+    let storage_title =
+        fit_text_to_width(display, if zh_mode { "儲存狀態" } else { "STORAGE" }, 74, 1);
+    display.text(176, 86, &storage_title, ui.text, ui.panel, 1);
     draw_storage_icon(display, 262, 82, &ui);
     let status_text = if storage_status.valid_record {
         if zh_mode {
@@ -304,6 +289,27 @@ pub fn render_diagnostics(
         &ui,
     );
 
+    display.fill_rect(18, 176, 132, 8, color::mix(ui.panel_alt, ui.white, 10));
+    display.stroke_rect(18, 176, 132, 8, 1, ui.steel);
+    let recovery_header = fit_text_to_width(
+        display,
+        if zh_mode {
+            "恢復動作 / 需二次確認"
+        } else {
+            "RECOVERY / DOUBLE CONFIRM"
+        },
+        120,
+        1,
+    );
+    display.text(
+        24,
+        177,
+        &recovery_header,
+        ui.text_muted,
+        color::mix(ui.panel_alt, ui.white, 10),
+        1,
+    );
+
     let selected_clear = selected_action == 0;
     let selected_reset = selected_action == 1;
     render_diag_action_button(
@@ -423,8 +429,43 @@ pub fn render_diagnostics(
     };
     display.fill_rect(18, 206, 284, 22, ui.panel_alt);
     display.stroke_rect(18, 206, 284, 22, 1, ui.steel);
-    display.text(28, 210, notice_title, ui.text, ui.panel_alt, 1);
-    display.text(28, 220, notice_body, ui.text_muted, ui.panel_alt, 1);
+    let notice_title = fit_text_to_width(display, notice_title, 210, 1);
+    let notice_body = fit_text_to_width(display, notice_body, 210, 1);
+    display.text(28, 210, &notice_title, ui.text, ui.panel_alt, 1);
+    display.text(28, 220, &notice_body, ui.text_muted, ui.panel_alt, 1);
+    display.fill_rect(
+        248,
+        208,
+        44,
+        10,
+        color::mix(ui.panel, if safe_boot { ui.amber } else { ui.cyan }, 20),
+    );
+    display.stroke_rect(
+        248,
+        208,
+        44,
+        10,
+        1,
+        if safe_boot { ui.amber } else { ui.cyan },
+    );
+    display.centered_text(
+        270,
+        211,
+        if safe_boot {
+            if zh_mode {
+                "SAFE"
+            } else {
+                "SAFE"
+            }
+        } else if zh_mode {
+            "LIVE"
+        } else {
+            "LIVE"
+        },
+        ui.text,
+        color::mix(ui.panel, if safe_boot { ui.amber } else { ui.cyan }, 20),
+        1,
+    );
 }
 
 fn render_diag_action_button(
@@ -444,8 +485,10 @@ fn render_diag_action_button(
     display.fill_rect(x + 8, y + 5, 10, 10, color::mix(fill, accent, 24));
     display.stroke_rect(x + 8, y + 5, 10, 10, 1, accent);
     display.fill_rect(x + 11, y + 8, 4, 4, accent);
-    display.text(x + 24, y + 5, title, ui.text, fill, 1);
-    display.text(x + 24, y + 13, subtitle, ui.text_muted, fill, 1);
+    let title = fit_text_to_width(display, title, w.saturating_sub(32), 1);
+    let subtitle = fit_text_to_width(display, subtitle, w.saturating_sub(32), 1);
+    display.text(x + 24, y + 5, &title, ui.text, fill, 1);
+    display.text(x + 24, y + 13, &subtitle, ui.text_muted, fill, 1);
 }
 
 fn draw_runtime_icon(display: &mut Display, x: u16, y: u16, ui: &crate::display::Palette) {
@@ -465,4 +508,40 @@ fn draw_storage_icon(display: &mut Display, x: u16, y: u16, ui: &crate::display:
     display.fill_rect(x + 6, y + 5, 6, 3, color::mix(ui.cyan, ui.white, 76));
     display.fill_rect(x + 15, y + 4, 5, 8, ui.text);
     display.fill_rect(x + 16, y + 6, 3, 4, color::mix(ui.panel_alt, ui.rose, 20));
+}
+
+fn touch_irq_line(zh_mode: bool, touch_ready: bool) -> String<24> {
+    let mut line: String<24> = String::new();
+    let readiness = if touch_ready {
+        if zh_mode {
+            "就緒"
+        } else {
+            "READY"
+        }
+    } else if zh_mode {
+        "未校正"
+    } else {
+        "PEND"
+    };
+    let pending = if board::touch_exti_pending() { "*" } else { "" };
+    let _ = write!(
+        &mut line,
+        "{} E{}{}",
+        readiness,
+        board::touch_exti_event_count(),
+        pending
+    );
+    line
+}
+
+fn button_irq_line() -> String<24> {
+    let (k1, k0, wkup) = board::button_exti_counts();
+    let mut line: String<24> = String::new();
+    let pending = if board::button_exti_pending_mask() != 0 {
+        "*"
+    } else {
+        ""
+    };
+    let _ = write!(&mut line, "1:{} 0:{} W:{}{}", k1, k0, wkup, pending);
+    line
 }

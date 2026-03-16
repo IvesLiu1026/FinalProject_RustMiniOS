@@ -40,8 +40,9 @@
 - Pixel Paint
 - Settings / Diagnostics / Safe Mode
 - Dungeon Core
-- Auto Hunter
-- Tap Rush
+- Station Hunter
+- Pseudo Racer
+- Graphics Lab
 
 ## Slide 4. 系統架構
 
@@ -104,7 +105,7 @@
 
 這頁可以講：
 
-- `Auto Hunter` 做了 partial redraw / dirty rect
+- `Station Hunter` 做了 partial redraw / dirty rect
 - `Pixel Paint` 改局部重繪
 - `Dungeon` 做模組拆分
 - shell / settings / diagnostics / safe mode 都是統一 lifecycle
@@ -135,10 +136,10 @@
 
 建議講這 4 個：
 
-- 開機與桌面再 polish
-- settings 做捲動
-- 桌面改成 icon 風格
-- 之後再考慮更完整的外部媒體路線
+- 音效或 chiptune 路線
+- 更多 asset-light, math-heavy showcase
+- 更完整的外部媒體 / companion 路線
+- 更進一步的 benchmark 與 profiling
 
 ## Demo flow
 
@@ -147,10 +148,11 @@
 1. 開機 splash
 2. Home launcher
 3. Album
-4. Pixel Paint
-5. Game Center -> Auto Hunter
-6. Game Center -> Dungeon Core
-7. Settings -> Diagnostics / About / Safe Mode
+4. Game Center -> Graphics Lab
+5. Game Center -> Pseudo Racer
+6. Game Center -> Station Hunter
+7. Game Center -> Dungeon Core
+8. Settings -> Diagnostics / Performance / About / Safe Mode
 
 這個順序的好處是：
 

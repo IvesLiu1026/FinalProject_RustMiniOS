@@ -120,7 +120,7 @@ fn storage_defaults_report_no_app_saves() {
 #[test]
 fn app_registry_slots_and_groupings_are_consistent() {
     assert_eq!(app_registry::home_apps().len(), 4);
-    assert_eq!(app_registry::game_center_apps().len(), 5);
+    assert_eq!(app_registry::game_center_apps().len(), 4);
 
     assert_eq!(app_registry::home_slot_for_app(AppId::Album), 0);
     assert_eq!(app_registry::home_slot_for_app(AppId::GameCenter), 1);
@@ -136,7 +136,7 @@ fn app_registry_slots_and_groupings_are_consistent() {
     assert_eq!(app_registry::game_center_slot_for_app(AppId::AutoBattle), Some(1));
     assert_eq!(app_registry::game_center_slot_for_app(AppId::PseudoRacer), Some(2));
     assert_eq!(app_registry::game_center_slot_for_app(AppId::GraphicsLab), Some(3));
-    assert_eq!(app_registry::game_center_slot_for_app(AppId::TapRush), Some(4));
+    assert_eq!(app_registry::game_center_slot_for_app(AppId::TapRush), None);
     assert_eq!(app_registry::game_center_slot_for_app(AppId::Album), None);
 }
 

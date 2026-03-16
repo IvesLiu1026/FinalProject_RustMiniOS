@@ -1,6 +1,7 @@
 use crate::board::ButtonSnapshot;
 use crate::companion::{self, CompanionError, CompanionState};
 use crate::display::{color, palette, Display, ThemeMode};
+use crate::jpeg_demo;
 use crate::media;
 use crate::touch::TouchState;
 use crate::ui::{
@@ -47,16 +48,18 @@ const NEXT_BUTTON_Y: u16 = 180;
 const NEXT_BUTTON_W: u16 = 74;
 const NEXT_BUTTON_H: u16 = 14;
 
-const TAB_STILLS_X: u16 = 190;
-const TAB_MOTION_X: u16 = 248;
+const TAB_STILLS_X: u16 = 162;
+const TAB_MOTION_X: u16 = 210;
+const TAB_JPEG_X: u16 = 258;
 const TAB_Y: u16 = 40;
-const TAB_W: u16 = 52;
+const TAB_W: u16 = 44;
 const TAB_H: u16 = 16;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum AlbumTab {
     Stills,
     Motion,
+    Jpeg,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -90,6 +93,7 @@ pub struct AlbumApp {
     source: AlbumSource,
     still_index: usize,
     motion_index: usize,
+    jpeg_index: usize,
     motion_frame: usize,
     motion_timer_ms: u16,
     playing: bool,
@@ -103,6 +107,7 @@ impl AlbumApp {
             source: AlbumSource::Waiting,
             still_index: 0,
             motion_index: 0,
+            jpeg_index: 0,
             motion_frame: 0,
             motion_timer_ms: 0,
             playing: true,
@@ -141,6 +146,8 @@ impl AlbumApp {
             self.set_tab(AlbumTab::Stills);
         } else if touch_released_in_rect(touch, TAB_MOTION_X, TAB_Y, TAB_W, TAB_H) {
             self.set_tab(AlbumTab::Motion);
+        } else if touch_released_in_rect(touch, TAB_JPEG_X, TAB_Y, TAB_W, TAB_H) {
+            self.set_tab(AlbumTab::Jpeg);
         } else if touch_released_in_rect(
             touch,
             PREV_BUTTON_X,
@@ -215,7 +222,27 @@ impl AlbumApp {
         self.motion_index = state.motion_index as usize;
         self.motion_frame = 0;
         self.motion_timer_ms = 0;
+        self.jpeg_index = 0;
         self.playing = state.playing;
+        self.redraw_pending = Some(AlbumRedraw::Full);
+    }
+
+    pub fn prepare_showcase(&mut self) {
+        self.refresh_source();
+        self.normalize_indices();
+        if self.motion_count() > 0 {
+            self.tab = AlbumTab::Motion;
+            self.playing = true;
+            self.motion_timer_ms = 0;
+            self.motion_frame = 0;
+        } else if self.still_count() > 0 {
+            self.tab = AlbumTab::Stills;
+        } else if self.jpeg_count() > 0 {
+            self.tab = AlbumTab::Jpeg;
+        } else {
+            self.tab = AlbumTab::Stills;
+        }
+        self.ensure_current_media_loaded();
         self.redraw_pending = Some(AlbumRedraw::Full);
     }
 
@@ -228,9 +255,9 @@ impl AlbumApp {
             display,
             if zh_mode { "相簿" } else { "ALBUM" },
             if zh_mode {
-                "stills / motion / built-in media"
+                "stills / motion / jpeg demo"
             } else {
-                "stills / motion / built-in media"
+                "stills / motion / jpeg demo"
             },
             ui.cyan,
             &ui,
@@ -262,6 +289,17 @@ impl AlbumApp {
             if zh_mode { "動畫" } else { "MOTION" },
             &ui,
         );
+        self.render_tab_chip(
+            display,
+            TAB_JPEG_X,
+            if matches!(self.tab, AlbumTab::Jpeg) {
+                ui.indigo
+            } else {
+                ui.steel
+            },
+            "JPEG",
+            &ui,
+        );
 
         match self.tab {
             AlbumTab::Stills => {
@@ -269,6 +307,9 @@ impl AlbumApp {
             }
             AlbumTab::Motion => {
                 self.render_motion(display, zh_mode, &ui);
+            }
+            AlbumTab::Jpeg => {
+                self.render_jpeg(display, zh_mode, &ui);
             }
         }
 
@@ -312,6 +353,17 @@ impl AlbumApp {
                 format_args!("MAC LINK / USART3 @ {}", companion::baud_rate()),
             );
             draw_footer_hint(display, &footer, ui.cyan, &ui);
+        } else if matches!(self.tab, AlbumTab::Jpeg) {
+            draw_footer_hint(
+                display,
+                if zh_mode {
+                    "板上 TJpgDec 即時解碼 / K0 WK 切換 JPEG"
+                } else {
+                    "ON-BOARD TJPGDEC / K0 WK SWITCH JPEG"
+                },
+                ui.indigo,
+                &ui,
+            );
         } else {
             draw_footer_hint(
                 display,
@@ -473,12 +525,24 @@ impl AlbumApp {
         draw_info_panel_icon(display, INFO_PANEL_X + 56, INFO_PANEL_Y + 8, self.tab, ui);
         let source_label = match self.source {
             AlbumSource::Companion => "MAC",
-            AlbumSource::Embedded => "ROM",
+            AlbumSource::Embedded => {
+                if matches!(self.tab, AlbumTab::Jpeg) {
+                    "JPEG"
+                } else {
+                    "ROM"
+                }
+            }
             AlbumSource::Waiting => "WAIT",
         };
         let source_accent = match self.source {
             AlbumSource::Companion => ui.cyan,
-            AlbumSource::Embedded => ui.amber,
+            AlbumSource::Embedded => {
+                if matches!(self.tab, AlbumTab::Jpeg) {
+                    ui.indigo
+                } else {
+                    ui.amber
+                }
+            }
             AlbumSource::Waiting => ui.rose,
         };
         display.fill_rect(INFO_PANEL_X + 12, INFO_PANEL_Y + 28, 8, 8, source_accent);
@@ -507,6 +571,12 @@ impl AlbumApp {
                     "點預覽暫停"
                 } else {
                     "TAP TO PAUSE"
+                }
+            } else if matches!(self.tab, AlbumTab::Jpeg) {
+                if zh_mode {
+                    "板上 JPEG 解碼"
+                } else {
+                    "ON-BOARD JPEG"
                 }
             } else if zh_mode {
                 "像素相紙檢視"
@@ -569,6 +639,8 @@ impl AlbumApp {
                 } else {
                     "MOTION"
                 }
+            } else if matches!(self.tab, AlbumTab::Jpeg) {
+                "JPEG"
             } else if zh_mode {
                 "圖片"
             } else {
@@ -619,7 +691,8 @@ impl AlbumApp {
     fn toggle_tab(&mut self) {
         self.set_tab(match self.tab {
             AlbumTab::Stills => AlbumTab::Motion,
-            AlbumTab::Motion => AlbumTab::Stills,
+            AlbumTab::Motion => AlbumTab::Jpeg,
+            AlbumTab::Jpeg => AlbumTab::Stills,
         });
     }
 
@@ -638,6 +711,13 @@ impl AlbumApp {
                     self.motion_index = (self.motion_index + total - 1) % total;
                     self.motion_frame = 0;
                     self.motion_timer_ms = 0;
+                    self.request_full_redraw();
+                }
+            }
+            AlbumTab::Jpeg => {
+                let total = self.jpeg_count();
+                if total > 0 {
+                    self.jpeg_index = (self.jpeg_index + total - 1) % total;
                     self.request_full_redraw();
                 }
             }
@@ -662,6 +742,13 @@ impl AlbumApp {
                     self.request_full_redraw();
                 }
             }
+            AlbumTab::Jpeg => {
+                let total = self.jpeg_count();
+                if total > 0 {
+                    self.jpeg_index = (self.jpeg_index + 1) % total;
+                    self.request_full_redraw();
+                }
+            }
         }
     }
 
@@ -676,7 +763,10 @@ impl AlbumApp {
     }
 
     fn refresh_source(&mut self) {
-        let next_source = if !media::stills().is_empty() || !media::motion_clips().is_empty() {
+        let next_source = if !media::stills().is_empty()
+            || !media::motion_clips().is_empty()
+            || !jpeg_demo::demos().is_empty()
+        {
             AlbumSource::Embedded
         } else {
             let companion = companion::link();
@@ -711,6 +801,13 @@ impl AlbumApp {
             0
         } else {
             self.motion_index % motion_count
+        };
+
+        let jpeg_count = self.jpeg_count();
+        self.jpeg_index = if jpeg_count == 0 {
+            0
+        } else {
+            self.jpeg_index % jpeg_count
         };
 
         let frame_count = self.current_motion_frame_count();
@@ -756,6 +853,7 @@ impl AlbumApp {
                     }
                 }
             }
+            AlbumTab::Jpeg => {}
         }
     }
 
@@ -845,6 +943,51 @@ impl AlbumApp {
         }
     }
 
+    fn render_jpeg(&self, display: &mut Display, zh_mode: bool, ui: &crate::display::Palette) {
+        if let Some(demo) = self.current_jpeg_demo() {
+            let result = display.draw_jpeg(
+                PREVIEW_BOX_X,
+                PREVIEW_BOX_Y,
+                PREVIEW_BOX_W,
+                PREVIEW_BOX_H,
+                demo.data,
+            );
+            self.render_caption(
+                display,
+                demo.label,
+                self.jpeg_index + 1,
+                self.jpeg_count(),
+                zh_mode,
+                ui,
+            );
+            self.render_jpeg_status(display, zh_mode, ui, result);
+            draw_info_strip(
+                display,
+                META_LABEL_X,
+                META_KIND_Y,
+                META_LABEL_W,
+                if zh_mode { "格式" } else { "FORMAT" },
+                "JPEG / TJpgDec",
+                ui.indigo,
+                ui,
+            );
+            if result != 0 {
+                if let Some(error) = display.jpeg_error_text() {
+                    display.centered_text(
+                        PREVIEW_BOX_X + PREVIEW_BOX_W / 2,
+                        PREVIEW_BOX_Y + PREVIEW_BOX_H - 12,
+                        error,
+                        ui.rose,
+                        color::mix(ui.panel_alt, ui.canvas, 18),
+                        1,
+                    );
+                }
+            }
+        } else {
+            self.render_empty(display, zh_mode, ui);
+        }
+    }
+
     fn render_motion_status(
         &self,
         display: &mut Display,
@@ -891,6 +1034,34 @@ impl AlbumApp {
         );
     }
 
+    fn render_jpeg_status(
+        &self,
+        display: &mut Display,
+        zh_mode: bool,
+        ui: &crate::display::Palette,
+        result: u8,
+    ) {
+        let status = if result == 0 {
+            if zh_mode {
+                "已解碼"
+            } else {
+                "DECODED"
+            }
+        } else {
+            "DECODE ERR"
+        };
+        draw_info_strip(
+            display,
+            META_LABEL_X,
+            META_STATUS_Y,
+            META_LABEL_W,
+            if zh_mode { "狀態" } else { "STATE" },
+            status,
+            if result == 0 { ui.lime } else { ui.rose },
+            ui,
+        );
+    }
+
     fn render_source_chip(
         &self,
         display: &mut Display,
@@ -899,7 +1070,24 @@ impl AlbumApp {
     ) {
         let (accent, label) = match self.source {
             AlbumSource::Companion => (ui.cyan, if zh_mode { "MAC 連線" } else { "MAC LINK" }),
-            AlbumSource::Embedded => (ui.orange, if zh_mode { "內建媒體" } else { "EMBEDDED" }),
+            AlbumSource::Embedded => (
+                if matches!(self.tab, AlbumTab::Jpeg) {
+                    ui.indigo
+                } else {
+                    ui.orange
+                },
+                if matches!(self.tab, AlbumTab::Jpeg) {
+                    if zh_mode {
+                        "JPEG 解碼示範"
+                    } else {
+                        "JPEG DEMO"
+                    }
+                } else if zh_mode {
+                    "內建媒體"
+                } else {
+                    "EMBEDDED"
+                },
+            ),
             AlbumSource::Waiting => (ui.rose, if zh_mode { "等待連線" } else { "WAIT LINK" }),
         };
         display.panel(
@@ -1040,6 +1228,14 @@ impl AlbumApp {
     fn current_embedded_clip(&self) -> Option<&'static media::EmbeddedMotionClip> {
         media::motion_clips().get(self.motion_index)
     }
+
+    fn jpeg_count(&self) -> usize {
+        jpeg_demo::demos().len()
+    }
+
+    fn current_jpeg_demo(&self) -> Option<&'static jpeg_demo::EmbeddedJpegDemo> {
+        jpeg_demo::demos().get(self.jpeg_index)
+    }
 }
 
 fn media_layout(width: u16, height: u16, max_scale: u16) -> Option<(u16, u16, u16)> {
@@ -1068,31 +1264,36 @@ fn draw_album_preview_decor(
     tab: AlbumTab,
     ui: &crate::display::Palette,
 ) {
-    let fill = if matches!(tab, AlbumTab::Motion) {
-        color::mix(ui.panel_alt, ui.rose, 28)
-    } else {
-        color::mix(ui.panel_alt, ui.amber, 28)
-    };
-    let accent = if matches!(tab, AlbumTab::Motion) {
-        ui.rose
-    } else {
-        ui.amber
+    let (fill, accent) = match tab {
+        AlbumTab::Motion => (color::mix(ui.panel_alt, ui.rose, 28), ui.rose),
+        AlbumTab::Jpeg => (color::mix(ui.panel_alt, ui.indigo, 32), ui.indigo),
+        AlbumTab::Stills => (color::mix(ui.panel_alt, ui.amber, 28), ui.amber),
     };
     display.fill_rect(x, y, 24, 14, fill);
     display.stroke_rect(x, y, 24, 14, 1, accent);
-    if matches!(tab, AlbumTab::Motion) {
-        display.fill_rect(x + 4, y + 3, 14, 8, ui.text);
-        display.fill_rect(x + 8, y + 5, 4, 4, fill);
-        display.fill_rect(x + 2, y + 4, 1, 2, ui.white);
-        display.fill_rect(x + 2, y + 8, 1, 2, ui.white);
-        display.fill_rect(x + 20, y + 4, 1, 2, ui.white);
-        display.fill_rect(x + 20, y + 8, 1, 2, ui.white);
-    } else {
-        display.fill_rect(x + 4, y + 2, 16, 10, ui.white);
-        display.stroke_rect(x + 4, y + 2, 16, 10, 1, accent);
-        display.fill_rect(x + 6, y + 4, 10, 5, color::mix(ui.cyan, ui.white, 80));
-        display.fill_rect(x + 8, y + 5, 2, 2, ui.amber);
-        display.fill_rect(x + 13, y + 5, 2, 2, ui.lime);
+    match tab {
+        AlbumTab::Motion => {
+            display.fill_rect(x + 4, y + 3, 14, 8, ui.text);
+            display.fill_rect(x + 8, y + 5, 4, 4, fill);
+            display.fill_rect(x + 2, y + 4, 1, 2, ui.white);
+            display.fill_rect(x + 2, y + 8, 1, 2, ui.white);
+            display.fill_rect(x + 20, y + 4, 1, 2, ui.white);
+            display.fill_rect(x + 20, y + 8, 1, 2, ui.white);
+        }
+        AlbumTab::Jpeg => {
+            display.fill_rect(x + 4, y + 2, 16, 10, ui.white);
+            display.stroke_rect(x + 4, y + 2, 16, 10, 1, accent);
+            display.text(x + 7, y + 5, "J", accent, ui.white, 1);
+            display.text(x + 11, y + 5, "P", accent, ui.white, 1);
+            display.text(x + 15, y + 5, "G", accent, ui.white, 1);
+        }
+        AlbumTab::Stills => {
+            display.fill_rect(x + 4, y + 2, 16, 10, ui.white);
+            display.stroke_rect(x + 4, y + 2, 16, 10, 1, accent);
+            display.fill_rect(x + 6, y + 4, 10, 5, color::mix(ui.cyan, ui.white, 80));
+            display.fill_rect(x + 8, y + 5, 2, 2, ui.amber);
+            display.fill_rect(x + 13, y + 5, 2, 2, ui.lime);
+        }
     }
 }
 
@@ -1124,30 +1325,33 @@ fn draw_info_panel_icon(
     tab: AlbumTab,
     ui: &crate::display::Palette,
 ) {
-    let fill = if matches!(tab, AlbumTab::Motion) {
-        color::mix(ui.panel_alt, ui.rose, 24)
-    } else {
-        color::mix(ui.panel_alt, ui.amber, 24)
-    };
-    let accent = if matches!(tab, AlbumTab::Motion) {
-        ui.rose
-    } else {
-        ui.amber
+    let (fill, accent) = match tab {
+        AlbumTab::Motion => (color::mix(ui.panel_alt, ui.rose, 24), ui.rose),
+        AlbumTab::Jpeg => (color::mix(ui.panel_alt, ui.indigo, 24), ui.indigo),
+        AlbumTab::Stills => (color::mix(ui.panel_alt, ui.amber, 24), ui.amber),
     };
     display.fill_rect(x, y, 26, 16, fill);
     display.stroke_rect(x, y, 26, 16, 1, accent);
-    if matches!(tab, AlbumTab::Motion) {
-        display.fill_rect(x + 5, y + 4, 12, 8, ui.text);
-        display.fill_rect(x + 9, y + 6, 4, 4, fill);
-        display.fill_rect(x + 3, y + 5, 1, 2, ui.white);
-        display.fill_rect(x + 3, y + 9, 1, 2, ui.white);
-        display.fill_rect(x + 18, y + 5, 1, 2, ui.white);
-        display.fill_rect(x + 18, y + 9, 1, 2, ui.white);
-    } else {
-        display.fill_rect(x + 4, y + 3, 15, 10, ui.white);
-        display.stroke_rect(x + 4, y + 3, 15, 10, 1, accent);
-        display.fill_rect(x + 6, y + 5, 10, 5, color::mix(ui.cyan, ui.white, 80));
-        display.fill_rect(x + 8, y + 6, 2, 2, ui.amber);
-        display.fill_rect(x + 12, y + 6, 2, 2, ui.lime);
+    match tab {
+        AlbumTab::Motion => {
+            display.fill_rect(x + 5, y + 4, 12, 8, ui.text);
+            display.fill_rect(x + 9, y + 6, 4, 4, fill);
+            display.fill_rect(x + 3, y + 5, 1, 2, ui.white);
+            display.fill_rect(x + 3, y + 9, 1, 2, ui.white);
+            display.fill_rect(x + 18, y + 5, 1, 2, ui.white);
+            display.fill_rect(x + 18, y + 9, 1, 2, ui.white);
+        }
+        AlbumTab::Jpeg => {
+            display.fill_rect(x + 4, y + 3, 16, 10, ui.white);
+            display.stroke_rect(x + 4, y + 3, 16, 10, 1, accent);
+            display.text(x + 7, y + 6, "JPG", accent, ui.white, 1);
+        }
+        AlbumTab::Stills => {
+            display.fill_rect(x + 4, y + 3, 15, 10, ui.white);
+            display.stroke_rect(x + 4, y + 3, 15, 10, 1, accent);
+            display.fill_rect(x + 6, y + 5, 10, 5, color::mix(ui.cyan, ui.white, 80));
+            display.fill_rect(x + 8, y + 6, 2, 2, ui.amber);
+            display.fill_rect(x + 12, y + 6, 2, 2, ui.lime);
+        }
     }
 }

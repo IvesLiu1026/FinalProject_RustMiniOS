@@ -43,9 +43,10 @@ cargo test
 - 預設 embedded 版 firmware 應直接顯示 still / motion 內容
 - 若使用 `Mac companion` 版 firmware，先在 Mac 啟動 companion host
 - companion 版 `Album` 左上來源 chip 應顯示 `MAC LINK`，未連線時應顯示等待提示
-- 可以切換 `Still / Motion`
+- 可以切換 `Still / Motion / JPEG`
 - still 圖片能正常顯示
 - motion clip 能播放與暫停
+- `JPEG` tab 能正常進行板上即時解碼
 - 返回 `Home` 後再進入，位置應保留
 
 ### 5. Pixel Paint
@@ -61,33 +62,48 @@ cargo test
 - 打出 best kill 後退出再進，最佳擊殺應保留
 - 升級三選一畫面應可正常選擇並回戰鬥
 
-### 7. Tap Rush
+### 7. Pseudo Racer
 
-- 遊戲能正常開始與結束
-- 分數刷新後退出再進，best score 應保留
+- 倒數、跑動與 finish 切換穩定
+- 畫面不應出現明顯白閃或整頁重刷
+- best time 應正確保存
 
-### 8. Dungeon Core
+### 8. Graphics Lab
+
+- 六個 mode 都可進入與返回
+- 執行中畫面應穩定
+- `BACK` 先回 mode 選單，再回 `Game Center`
+
+### 9. Dungeon Core
 
 - `Game Center -> Map Select -> Dungeon Core` 路徑正常
 - 可切換地圖並進入遊戲
 - HUD、武器切換、返回 `Map Select / Game Center` 都正常
 - 畫面不應黑屏，返回路徑不應卡死
 
-### 9. Diagnostics
+### 10. Diagnostics
 
 - 可看到 FPS、touch 狀態、storage 狀態、最近 app
 - 可看到 build version、git sha、media counts、boot mode
+- 可看到 `BTN IRQ` 與 `TOUCH IRQ` 計數
 - `Clear Save Data` 兩次確認後，app 存檔應清空
 - 系統設定與觸控校正不應被 `Clear Save Data` 清掉
 
-### 10. About
+### 11. Performance / Benchmark
+
+- `Performance Console` 文字不應重疊
+- `FLASH / DATA / BSS / FPS / PIPELINE` 應正常顯示
+- `BENCH` 可順利跑完 `UI Fill / RGB Blit / Pseudo Racer / Graphics Lab`
+- 結果頁應顯示 `AVG / MIN / SCORE / GRADE`
+
+### 12. About
 
 - `Settings -> About` 可以正常進入與返回
 - 應顯示 `version / git sha / build profile / target`
 - 應顯示 media counts 與 storage bytes
 - 應顯示安全模式提示文字
 
-### 11. Safe Mode
+### 13. Safe Mode
 
 - 開機時按住 `K1`
 - boot splash 應顯示 safe mode requested
@@ -95,7 +111,13 @@ cargo test
 - 可以用按鍵選 `Home / Touch Calibration / Diagnostics`
 - 從 `Safe Mode -> Diagnostics` 返回時，應回到 `Safe Mode`
 
-### 12. Factory Reset
+### 14. Showcase Mode
+
+- 可從 `Settings` 正常進入
+- 能輪播 `Desktop / Album / Station Hunter / Pseudo Racer / Graphics Lab / Diagnostics`
+- `K1` 可暫停/恢復，`K0/WKUP` 可切場景
+
+### 15. Factory Reset
 
 - 在 `Diagnostics` 觸發 `Factory Reset`
 - reset 後應回到首次開機狀態

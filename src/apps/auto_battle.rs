@@ -702,6 +702,12 @@ impl AutoBattleApp {
         self.request_redraw(AutoBattleRedraw::Full);
     }
 
+    pub fn start_showcase(&mut self, stage_index: usize) {
+        let unlocked_limit = self.profile.unlocked_stage.max(1) as usize;
+        self.stage_select_index = stage_index.min(unlocked_limit.saturating_sub(1));
+        self.start_selected_stage();
+    }
+
     pub fn snapshot(&self) -> PersistedStationHunterData {
         self.profile
     }

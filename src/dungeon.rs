@@ -37,11 +37,11 @@ const MAP_BUTTON_Y: u16 = 162;
 const MAP_BUTTON_W: u16 = 102;
 const MAP_BUTTON_H: u16 = 18;
 const OVERLAY_RETRY_X: u16 = 70;
-const OVERLAY_RETRY_Y: u16 = 138;
+const OVERLAY_RETRY_Y: u16 = 146;
 const OVERLAY_RETRY_W: u16 = 84;
 const OVERLAY_RETRY_H: u16 = 22;
 const OVERLAY_MAPS_X: u16 = 168;
-const OVERLAY_MAPS_Y: u16 = 138;
+const OVERLAY_MAPS_Y: u16 = 146;
 const OVERLAY_MAPS_W: u16 = 84;
 const OVERLAY_MAPS_H: u16 = 22;
 

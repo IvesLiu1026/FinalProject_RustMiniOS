@@ -7,7 +7,7 @@ use crate::display::{color, palette, Display, Palette, ThemeMode};
 
 use super::{
     draw_footer_hint, draw_gradient_background, draw_info_strip, draw_shell_window, draw_title_bar,
-    render_nav_back,
+    fit_text_to_width, render_nav_back,
 };
 
 pub fn render_control_room(display: &mut Display, board: &Board, theme: ThemeMode, zh_mode: bool) {
@@ -58,10 +58,9 @@ pub fn render_control_room(display: &mut Display, board: &Board, theme: ThemeMod
 
     display.panel(18, 62, 136, 84, ui.panel_alt, ui.cyan);
     draw_runtime_monitor(display, 104, 72, board.led_on(), &ui);
-    display.text(32, 72, &uptime, ui.text, ui.panel_alt, 2);
-    display.text(
-        32,
-        102,
+    display.text(32, 72, &uptime, ui.text, ui.panel_alt, 1);
+    let led_state = fit_text_to_width(
+        display,
         if board.led_on() {
             if zh_mode {
                 "LED 亮起"
@@ -73,6 +72,13 @@ pub fn render_control_room(display: &mut Display, board: &Board, theme: ThemeMod
         } else {
             "LED STATE OFF"
         },
+        88,
+        1,
+    );
+    display.text(
+        32,
+        102,
+        &led_state,
         if board.led_on() {
             ui.lime
         } else {
@@ -97,54 +103,50 @@ pub fn render_control_room(display: &mut Display, board: &Board, theme: ThemeMod
     );
 
     display.panel(166, 62, 136, 84, ui.panel, ui.lime);
-    display.text(
-        176,
-        74,
+    let control_title = fit_text_to_width(
+        display,
         if zh_mode {
             "操作提示"
         } else {
             "CONTROL MAP"
         },
-        ui.text,
-        ui.panel,
-        2,
+        86,
+        1,
     );
-    display.text(
-        176,
-        94,
+    display.text(176, 74, &control_title, ui.text, ui.panel, 1);
+    let line1 = fit_text_to_width(
+        display,
         if zh_mode {
             "K1: 切換 LED"
         } else {
             "K1: TOGGLE LED"
         },
-        ui.text_muted,
-        ui.panel,
+        114,
         1,
     );
-    display.text(
-        176,
-        108,
+    display.text(176, 94, &line1, ui.text_muted, ui.panel, 1);
+    let line2 = fit_text_to_width(
+        display,
         if zh_mode {
             "K0: 返回設定"
         } else {
             "K0: BACK TO SETTINGS"
         },
-        ui.text_muted,
-        ui.panel,
+        114,
         1,
     );
-    display.text(
-        176,
-        122,
+    display.text(176, 108, &line2, ui.text_muted, ui.panel, 1);
+    let line3 = fit_text_to_width(
+        display,
         if zh_mode {
             "WK: 下一項 / 首頁"
         } else {
             "WK: NEXT / HOME"
         },
-        ui.text_muted,
-        ui.panel,
+        114,
         1,
     );
+    display.text(176, 122, &line3, ui.text_muted, ui.panel, 1);
 
     render_button_card(
         display,
@@ -212,5 +214,6 @@ fn render_button_card(
 ) {
     display.panel(x, y, 85, 52, ui.panel, accent);
     display.text(x + 18, y + 10, title, ui.text, ui.panel, 3);
-    display.text(x + 10, y + 34, subtitle, ui.text_muted, ui.panel, 1);
+    let subtitle = fit_text_to_width(display, subtitle, 66, 1);
+    display.text(x + 10, y + 34, &subtitle, ui.text_muted, ui.panel, 1);
 }

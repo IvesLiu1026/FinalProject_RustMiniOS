@@ -10,6 +10,7 @@ mod display;
 mod dungeon;
 mod font;
 mod font_zh;
+mod jpeg_demo;
 mod media;
 mod shell;
 mod storage;
@@ -23,6 +24,7 @@ use cortex_m_rt::{entry, exception};
 use display::Display;
 use panic_halt as _;
 use shell::{boot_sequence, MiniOs};
+use stm32f4::stm32f407::interrupt;
 use touch::Touch;
 
 unsafe extern "C" {
@@ -85,6 +87,21 @@ fn main() -> ! {
 #[exception]
 fn SysTick() {
     board::systick();
+}
+
+#[interrupt]
+fn EXTI1() {
+    board::touch_irq_exti_handler();
+}
+
+#[interrupt]
+fn EXTI0() {
+    board::wkup_button_exti_handler();
+}
+
+#[interrupt]
+fn EXTI9_5() {
+    board::button_bank_exti_handler();
 }
 
 fn enable_fpu() {

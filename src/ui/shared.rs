@@ -151,33 +151,39 @@ pub fn draw_info_strip(
     accent: u16,
     ui: &Palette,
 ) {
-    display.fill_rect(x, y, width, 14, color::mix(ui.panel_alt, accent, 36));
+    let fill = color::mix(ui.panel_alt, accent, 36);
+    let value_color = if ui.text == color::INK {
+        color::mix(ui.text, accent, 52)
+    } else {
+        color::mix(ui.white, accent, 72)
+    };
+    display.fill_rect(x, y, width, 14, fill);
     display.stroke_rect(x, y, width, 14, 1, accent);
-    display.text(
-        x + 6,
-        y + 3,
-        title,
-        ui.text,
-        color::mix(ui.panel_alt, accent, 36),
-        1,
-    );
-    let value_width = display.measure_text(value, 1);
+    let reserve_title = display.measure_text(title, 1).min(width / 2);
+    let value_max = width
+        .saturating_sub(12)
+        .saturating_sub(reserve_title)
+        .saturating_sub(6);
+    let value_text = fit_text_to_width(display, value, value_max.max(18), 1);
+    let value_width = display.measure_text(&value_text, 1);
+    let title_max = width
+        .saturating_sub(12)
+        .saturating_sub(value_width)
+        .saturating_sub(6);
+    let title_text = fit_text_to_width(display, title, title_max.max(18), 1);
+    display.text(x + 6, y + 3, &title_text, ui.text, fill, 1);
     let value_x = x + width.saturating_sub(value_width).saturating_sub(6);
-    display.text(
-        value_x,
-        y + 3,
-        value,
-        color::mix(ui.white, accent, 72),
-        color::mix(ui.panel_alt, accent, 36),
-        1,
-    );
+    display.text(value_x, y + 3, &value_text, value_color, fill, 1);
 }
 
 pub fn draw_footer_hint(display: &mut Display, text: &str, accent: u16, ui: &Palette) {
     let y = SHELL_WINDOW_Y + SHELL_WINDOW_H - 20;
-    display.fill_rect(SHELL_WINDOW_X + 8, y, SHELL_WINDOW_W - 16, 14, ui.panel_alt);
-    display.stroke_rect(SHELL_WINDOW_X + 8, y, SHELL_WINDOW_W - 16, 14, 1, accent);
-    display.text(SHELL_WINDOW_X + 14, y + 3, text, ui.text, ui.panel_alt, 1);
+    let inner_x = SHELL_WINDOW_X + 8;
+    let inner_w = SHELL_WINDOW_W - 16;
+    let fitted = fit_text_to_width(display, text, inner_w.saturating_sub(12), 1);
+    display.fill_rect(inner_x, y, inner_w, 14, ui.panel_alt);
+    display.stroke_rect(inner_x, y, inner_w, 14, 1, accent);
+    display.text(inner_x + 6, y + 3, &fitted, ui.text, ui.panel_alt, 1);
 }
 
 pub fn draw_scrollbar(
@@ -374,7 +380,7 @@ pub fn render_nav_back(display: &mut Display, zh_mode: bool, accent: u16, ui: &P
     );
 }
 
-fn fit_text_to_width(display: &Display, text: &str, max_width: u16, scale: u16) -> String<80> {
+pub fn fit_text_to_width(display: &Display, text: &str, max_width: u16, scale: u16) -> String<80> {
     let mut exact = String::<80>::new();
     let _ = exact.push_str(text);
     if display.measure_text(&exact, scale) <= max_width {

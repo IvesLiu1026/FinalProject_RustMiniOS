@@ -1,7 +1,7 @@
 use core::fmt::Write;
 
 use heapless::String;
-use libm::{fabsf, sinf};
+use libm::{fabsf, floorf, sinf};
 
 use crate::board::ButtonSnapshot;
 use crate::display::{color, palette, Display, ThemeMode};
@@ -18,6 +18,10 @@ const VIEW_X: u16 = 18;
 const VIEW_Y: u16 = 46;
 const VIEW_W: u16 = 284;
 const VIEW_H: u16 = 148;
+const ROAD_BUF_W: usize = 71;
+const ROAD_BUF_H: usize = 37;
+const ROAD_BUF_PIXELS: usize = ROAD_BUF_W * ROAD_BUF_H;
+const ROAD_BUF_SCALE: u16 = 4;
 
 const TRACK_CARD_X: u16 = 28;
 const TRACK_CARD_Y: u16 = 64;
@@ -38,6 +42,9 @@ const TRACK_FAR_CLAMP: f32 = 6.0;
 const OFFROAD_THRESHOLD: f32 = 0.76;
 const OFFROAD_DANGER_THRESHOLD: f32 = 0.90;
 const BOOST_FLASH_MS: u16 = 280;
+const RACER_FRAME_INTERVAL_MS: u16 = 50;
+
+static mut ROAD_VIEW_BUFFER: [u16; ROAD_BUF_PIXELS] = [0; ROAD_BUF_PIXELS];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PseudoRacerAction {
@@ -478,6 +485,10 @@ const TRACKS: [TrackDefinition; TRACK_COUNT] = [
 pub struct PseudoRacerApp {
     state: RacerState,
     selected_track: usize,
+    showcase_autopilot: bool,
+    full_redraw_pending: bool,
+    render_pending: bool,
+    render_accum_ms: u16,
     countdown_ms: u16,
     elapsed_ms: u32,
     time_left_ms: u32,
@@ -502,6 +513,10 @@ impl PseudoRacerApp {
         Self {
             state: RacerState::TrackSelect,
             selected_track: 0,
+            showcase_autopilot: false,
+            full_redraw_pending: false,
+            render_pending: false,
+            render_accum_ms: 0,
             countdown_ms: 0,
             elapsed_ms: 0,
             time_left_ms: 0,
@@ -524,6 +539,10 @@ impl PseudoRacerApp {
 
     pub fn enter(&mut self) {
         self.state = RacerState::TrackSelect;
+        self.showcase_autopilot = false;
+        self.full_redraw_pending = true;
+        self.render_pending = true;
+        self.render_accum_ms = 0;
         self.countdown_ms = 0;
         self.elapsed_ms = 0;
         self.time_left_ms = 0;
@@ -551,6 +570,24 @@ impl PseudoRacerApp {
         self.enter();
     }
 
+    pub fn start_showcase(&mut self, track_index: usize) {
+        self.selected_track = track_index % TRACK_COUNT;
+        self.showcase_autopilot = true;
+        self.start_run();
+    }
+
+    pub fn take_full_redraw_request(&mut self) -> bool {
+        let redraw = self.full_redraw_pending;
+        self.full_redraw_pending = false;
+        redraw
+    }
+
+    pub fn take_render_request(&mut self) -> bool {
+        let redraw = self.render_pending;
+        self.render_pending = false;
+        redraw
+    }
+
     pub fn take_persist_request(&mut self) -> bool {
         let persist = self.persist_requested;
         self.persist_requested = false;
@@ -571,6 +608,7 @@ impl PseudoRacerApp {
             || touch_released_in_rect(touch, NAV_BACK_X, NAV_BACK_Y, NAV_BACK_W, NAV_BACK_H)
         {
             self.state = RacerState::TrackSelect;
+            self.showcase_autopilot = false;
             return PseudoRacerAction::ExitGameCenter;
         }
 
@@ -580,7 +618,9 @@ impl PseudoRacerApp {
                 self.countdown_ms = self.countdown_ms.saturating_sub(dt_ms as u16);
                 if self.countdown_ms == 0 {
                     self.state = RacerState::Racing;
+                    self.render_pending = true;
                 }
+                self.queue_runtime_frame(dt_ms);
             }
             RacerState::Racing => self.update_race(input, touch, dt_ms),
             RacerState::Finish => {
@@ -589,6 +629,9 @@ impl PseudoRacerApp {
                 }
                 if input.wkup_just_pressed {
                     self.state = RacerState::TrackSelect;
+                    self.showcase_autopilot = false;
+                    self.full_redraw_pending = true;
+                    self.render_pending = true;
                 }
             }
         }
@@ -597,12 +640,20 @@ impl PseudoRacerApp {
     }
 
     pub fn needs_animation(&self) -> bool {
-        matches!(self.state, RacerState::Countdown | RacerState::Racing)
+        (matches!(self.state, RacerState::Countdown | RacerState::Racing)
             || self.crash_flash_ms > 0
-            || self.checkpoint_flash_ms > 0
+            || self.checkpoint_flash_ms > 0)
+            && self.render_pending
     }
 
-    pub fn render(&self, display: &mut Display, theme: ThemeMode, zh_mode: bool) {
+    pub fn can_partial_render(&self) -> bool {
+        matches!(
+            self.state,
+            RacerState::Countdown | RacerState::Racing | RacerState::Finish
+        )
+    }
+
+    pub fn render(&mut self, display: &mut Display, theme: ThemeMode, zh_mode: bool) {
         let ui = palette(theme);
         draw_gradient_background(display, theme, 54);
         draw_shell_window(display, ui.orange, &ui);
@@ -631,12 +682,23 @@ impl PseudoRacerApp {
         }
     }
 
+    pub fn render_partial(&mut self, display: &mut Display, theme: ThemeMode, zh_mode: bool) {
+        if !self.can_partial_render() {
+            self.render(display, theme, zh_mode);
+            return;
+        }
+        let ui = palette(theme);
+        self.render_race_partial(display, zh_mode, &ui);
+    }
+
     fn update_track_select(&mut self, input: &ButtonSnapshot, touch: &TouchState) {
         if input.k0_just_pressed {
             self.selected_track = (self.selected_track + TRACK_COUNT - 1) % TRACK_COUNT;
+            self.render_pending = true;
         }
         if input.wkup_just_pressed {
             self.selected_track = (self.selected_track + 1) % TRACK_COUNT;
+            self.render_pending = true;
         }
         if input.k1_just_pressed {
             self.start_run();
@@ -676,15 +738,27 @@ impl PseudoRacerApp {
             34,
         );
 
-        let steer = if (input.k0 || left_touch) && !(input.wkup || right_touch) {
+        let current_curve = self.sample_road(self.distance + 18.0).curve;
+        let steer = if self.showcase_autopilot {
+            let preview_curve = self.sample_road(self.distance + 36.0).curve;
+            let target_x = clampf(
+                (-preview_curve * 0.42) + sinf(self.distance * 0.018) * 0.10,
+                -0.36,
+                0.36,
+            );
+            clampf((target_x - self.player_x) * 2.6, -1.0, 1.0)
+        } else if (input.k0 || left_touch) && !(input.wkup || right_touch) {
             -1.0
         } else if (input.wkup || right_touch) && !(input.k0 || left_touch) {
             1.0
         } else {
             0.0
         };
-        let braking = input.k1 || brake_touch;
-        let current_curve = self.sample_road(self.distance + 18.0).curve;
+        let braking = if self.showcase_autopilot {
+            false
+        } else {
+            input.k1 || brake_touch
+        };
 
         self.player_x = clampf(
             self.player_x + steer * dt * 1.12 - current_curve * dt * 1.8,
@@ -732,6 +806,7 @@ impl PseudoRacerApp {
 
         self.check_collisions();
         self.check_checkpoints();
+        self.queue_runtime_frame(dt_ms);
 
         if self.distance >= self.current_track_total {
             let best = &mut self.best_time_ms[self.selected_track];
@@ -740,8 +815,10 @@ impl PseudoRacerApp {
                 self.request_persist();
             }
             self.state = RacerState::Finish;
+            self.render_pending = true;
         } else if self.time_left_ms == 0 {
             self.state = RacerState::Finish;
+            self.render_pending = true;
         }
     }
 
@@ -875,103 +952,10 @@ impl PseudoRacerApp {
         );
     }
 
-    fn render_race(&self, display: &mut Display, zh_mode: bool, ui: &crate::display::Palette) {
+    fn render_race(&mut self, display: &mut Display, zh_mode: bool, ui: &crate::display::Palette) {
         let track = &TRACKS[self.selected_track];
         let horizon_y = self.road_horizon_y();
-        let view_bottom = VIEW_Y + VIEW_H;
-
-        display.fill_rect(VIEW_X, VIEW_Y, VIEW_W, VIEW_H, track.sky);
-        self.draw_backdrop(display, track, horizon_y, ui);
-        display.fill_rect(
-            VIEW_X,
-            horizon_y,
-            VIEW_W,
-            view_bottom.saturating_sub(horizon_y),
-            track.ground_a,
-        );
-        display.fill_rect(
-            VIEW_X,
-            horizon_y.saturating_sub(8),
-            VIEW_W,
-            8,
-            track.horizon,
-        );
-        self.draw_hills(display, track, horizon_y, ui);
-
-        for row in 0..VIEW_H {
-            let y = VIEW_Y + row;
-            if y < horizon_y {
-                continue;
-            }
-
-            let depth =
-                (y - horizon_y) as f32 / (view_bottom.saturating_sub(horizon_y).max(1)) as f32;
-            let sample_dist = self.distance + TRACK_FAR_CLAMP + depth * depth * VISIBLE_DISTANCE;
-            let road = self.sample_road(sample_dist);
-            let road_half = (18.0 + depth * depth * 108.0) * road.width;
-            let center = VIEW_X as f32 + VIEW_W as f32 * 0.5 + road.offset * (0.32 + depth * 0.55)
-                - self.player_x * road_half * 0.92;
-
-            let left = clampf(
-                center - road_half,
-                VIEW_X as f32,
-                (VIEW_X + VIEW_W - 1) as f32,
-            );
-            let right = clampf(
-                center + road_half,
-                VIEW_X as f32,
-                (VIEW_X + VIEW_W - 1) as f32,
-            );
-            let left_u = left as u16;
-            let right_u = right as u16;
-            let strip_toggle = ((sample_dist / 22.0) as i32 & 1) == 0;
-
-            display.fill_rect(
-                VIEW_X,
-                y,
-                VIEW_W,
-                1,
-                if strip_toggle {
-                    track.ground_a
-                } else {
-                    track.ground_b
-                },
-            );
-            if right_u > left_u {
-                let rumble_w = (2.0 + depth * depth * 8.0) as u16;
-                let road_fill = if strip_toggle {
-                    track.road_a
-                } else {
-                    track.road_b
-                };
-                let stripe_fill = if strip_toggle {
-                    track.stripe_a
-                } else {
-                    track.stripe_b
-                };
-                if left_u > VIEW_X {
-                    display.fill_rect(left_u.saturating_sub(rumble_w), y, rumble_w, 1, stripe_fill);
-                }
-                display.fill_rect(left_u, y, right_u.saturating_sub(left_u), 1, road_fill);
-                display.fill_rect(
-                    right_u,
-                    y,
-                    rumble_w.min(VIEW_X + VIEW_W - right_u),
-                    1,
-                    stripe_fill,
-                );
-
-                if strip_toggle && (y & 0x07) < 4 {
-                    let lane_w = (road_half * 0.10).max(2.0) as u16;
-                    let lane_x =
-                        clampf(center - lane_w as f32 / 2.0, left, right - lane_w as f32) as u16;
-                    display.fill_rect(lane_x, y, lane_w, 1, track.stripe_b);
-                }
-            }
-        }
-
-        self.draw_roadside_posts(display, track, horizon_y);
-        self.draw_roadside_decor(display, track, horizon_y, ui);
+        self.render_buffered_viewport(display, track, horizon_y, ui);
         self.draw_objects(display, track);
         self.draw_checkpoint_banner(display, track);
         self.draw_player_car(display, track, ui);
@@ -1026,6 +1010,336 @@ impl PseudoRacerApp {
                 self.draw_finish_overlay(display, track, zh_mode, ui);
             }
             _ => {}
+        }
+    }
+
+    fn render_race_partial(
+        &mut self,
+        display: &mut Display,
+        zh_mode: bool,
+        ui: &crate::display::Palette,
+    ) {
+        self.render_race(display, zh_mode, ui);
+    }
+
+    fn render_buffered_viewport(
+        &self,
+        display: &mut Display,
+        track: &TrackDefinition,
+        horizon_y: u16,
+        ui: &crate::display::Palette,
+    ) {
+        unsafe {
+            let buffer = &mut *core::ptr::addr_of_mut!(ROAD_VIEW_BUFFER);
+            self.draw_road_buffer(buffer, track, horizon_y, ui);
+            display.draw_rgb565_scaled(
+                VIEW_X,
+                VIEW_Y,
+                ROAD_BUF_W as u16,
+                ROAD_BUF_H as u16,
+                ROAD_BUF_SCALE,
+                buffer,
+            );
+        }
+    }
+
+    fn draw_road_buffer(
+        &self,
+        buffer: &mut [u16; ROAD_BUF_PIXELS],
+        track: &TrackDefinition,
+        horizon_y: u16,
+        ui: &crate::display::Palette,
+    ) {
+        road_buffer_clear(buffer, track.sky);
+        let horizon_low = full_to_road_y(horizon_y as f32).clamp(0, ROAD_BUF_H as i16 - 1) as usize;
+
+        self.draw_buffer_backdrop(buffer, track, horizon_low as i16, ui);
+        self.draw_buffer_hills(buffer, track, horizon_low as i16, ui);
+
+        if horizon_low < ROAD_BUF_H {
+            road_buffer_fill_rect(
+                buffer,
+                0,
+                horizon_low as i16,
+                ROAD_BUF_W as u16,
+                (ROAD_BUF_H - horizon_low) as u16,
+                track.ground_a,
+            );
+        }
+        road_buffer_fill_rect(
+            buffer,
+            0,
+            horizon_low.saturating_sub(2) as i16,
+            ROAD_BUF_W as u16,
+            2,
+            track.horizon,
+        );
+
+        let view_bottom = VIEW_Y + VIEW_H;
+        for row in 0..ROAD_BUF_H {
+            let full_y = VIEW_Y + row as u16 * ROAD_BUF_SCALE + ROAD_BUF_SCALE / 2;
+            if full_y < horizon_y {
+                continue;
+            }
+
+            let depth =
+                (full_y - horizon_y) as f32 / (view_bottom.saturating_sub(horizon_y).max(1)) as f32;
+            let sample_dist = self.distance + TRACK_FAR_CLAMP + depth * depth * VISIBLE_DISTANCE;
+            let road = self.sample_road(sample_dist);
+            let road_half_full = (18.0 + depth * depth * 108.0) * road.width;
+            let road_half = road_half_full / ROAD_BUF_SCALE as f32;
+            let center = ROAD_BUF_W as f32 * 0.5
+                + (road.offset * (0.32 + depth * 0.55)) / ROAD_BUF_SCALE as f32
+                - self.player_x * road_half * 0.92;
+            let left = clampf(center - road_half, 0.0, (ROAD_BUF_W - 1) as f32);
+            let right = clampf(center + road_half, 0.0, (ROAD_BUF_W - 1) as f32);
+            let left_u = left as usize;
+            let right_u = right as usize;
+            let strip_toggle = ((sample_dist / 22.0) as i32 & 1) == 0;
+            let row_color = if strip_toggle {
+                track.ground_a
+            } else {
+                track.ground_b
+            };
+            road_buffer_fill_rect(buffer, 0, row as i16, ROAD_BUF_W as u16, 1, row_color);
+
+            if right_u > left_u {
+                let rumble_w =
+                    ((2.0 + depth * depth * 8.0) / ROAD_BUF_SCALE as f32).max(1.0) as usize;
+                let road_fill = if strip_toggle {
+                    track.road_a
+                } else {
+                    track.road_b
+                };
+                let stripe_fill = if strip_toggle {
+                    track.stripe_a
+                } else {
+                    track.stripe_b
+                };
+                if left_u > 0 {
+                    let start = left_u.saturating_sub(rumble_w);
+                    road_buffer_fill_rect(
+                        buffer,
+                        start as i16,
+                        row as i16,
+                        (left_u - start) as u16,
+                        1,
+                        stripe_fill,
+                    );
+                }
+                road_buffer_fill_rect(
+                    buffer,
+                    left_u as i16,
+                    row as i16,
+                    (right_u - left_u).max(1) as u16,
+                    1,
+                    road_fill,
+                );
+                if right_u < ROAD_BUF_W {
+                    let width = rumble_w.min(ROAD_BUF_W - right_u);
+                    road_buffer_fill_rect(
+                        buffer,
+                        right_u as i16,
+                        row as i16,
+                        width as u16,
+                        1,
+                        stripe_fill,
+                    );
+                }
+                if strip_toggle && (row & 0x01) == 0 {
+                    let lane_w = (road_half * 0.10).max(1.0) as usize;
+                    let lane_x =
+                        clampf(center - lane_w as f32 / 2.0, left, right - lane_w as f32) as usize;
+                    road_buffer_fill_rect(
+                        buffer,
+                        lane_x as i16,
+                        row as i16,
+                        lane_w.max(1) as u16,
+                        1,
+                        track.stripe_b,
+                    );
+                }
+            }
+        }
+
+        self.draw_buffer_posts(buffer, track, horizon_y);
+        self.draw_buffer_decor(buffer, track, horizon_y, ui);
+    }
+
+    fn draw_buffer_backdrop(
+        &self,
+        buffer: &mut [u16; ROAD_BUF_PIXELS],
+        track: &TrackDefinition,
+        horizon_low: i16,
+        ui: &crate::display::Palette,
+    ) {
+        match self.selected_track {
+            0 => {
+                road_buffer_fill_rect(buffer, 54, 4, 8, 8, color::mix(track.horizon, ui.white, 58));
+                for i in 0..4i16 {
+                    let x = 8 + i * 16 - (((self.distance * 0.12) as i32).rem_euclid(10) as i16);
+                    road_buffer_fill_rect(
+                        buffer,
+                        x,
+                        5 + (i & 1),
+                        5,
+                        2,
+                        color::mix(ui.white, track.sky, 40),
+                    );
+                    road_buffer_fill_rect(
+                        buffer,
+                        x + 1,
+                        4 + (i & 1),
+                        3,
+                        1,
+                        color::mix(ui.white, track.sky, 28),
+                    );
+                }
+            }
+            1 => {
+                road_buffer_fill_rect(buffer, 55, 4, 6, 6, color::mix(track.horizon, ui.white, 42));
+                for i in 0..6i16 {
+                    let x = i * 10;
+                    let height = 3 + ((i as usize + self.checkpoint_index) % 3) as u16 * 2;
+                    road_buffer_fill_rect(
+                        buffer,
+                        x,
+                        horizon_low - height as i16,
+                        4,
+                        height,
+                        color::mix(track.horizon, ui.shadow, 90),
+                    );
+                }
+            }
+            _ => {
+                road_buffer_fill_rect(buffer, 56, 4, 4, 4, color::mix(ui.white, track.horizon, 24));
+                road_buffer_fill_rect(buffer, 57, 5, 3, 3, color::mix(ui.white, track.sky, 12));
+                for i in 0..10usize {
+                    let x = ((i * 6 + (self.distance as usize / 2)) % ROAD_BUF_W) as i16;
+                    let y = 2 + ((i * 3) % 5) as i16;
+                    road_buffer_fill_rect(buffer, x, y, 1, 1, ui.white);
+                }
+            }
+        }
+    }
+
+    fn draw_buffer_hills(
+        &self,
+        buffer: &mut [u16; ROAD_BUF_PIXELS],
+        track: &TrackDefinition,
+        horizon_low: i16,
+        ui: &crate::display::Palette,
+    ) {
+        let hill_color = color::mix(track.horizon, ui.indigo, 90);
+        let base = horizon_low.saturating_sub(5);
+        let x_shift = (((self.distance * 0.18) as i32) % 12) as i16;
+        for index in 0..6i16 {
+            let x = index * 12 - x_shift;
+            let peak = base.saturating_sub((index as u16 % 3 * 2) as i16);
+            road_buffer_fill_rect(
+                buffer,
+                x,
+                peak,
+                7,
+                (horizon_low - peak).max(1) as u16,
+                hill_color,
+            );
+        }
+    }
+
+    fn draw_buffer_posts(
+        &self,
+        buffer: &mut [u16; ROAD_BUF_PIXELS],
+        track: &TrackDefinition,
+        horizon_y: u16,
+    ) {
+        let mut row = full_to_road_y((horizon_y + 8) as f32).max(0) as usize;
+        while row + 1 < ROAD_BUF_H - 3 {
+            let full_y = VIEW_Y + row as u16 * ROAD_BUF_SCALE + ROAD_BUF_SCALE / 2;
+            let depth = (full_y - horizon_y) as f32 / (VIEW_Y + VIEW_H - horizon_y).max(1) as f32;
+            let sample_dist = self.distance + 10.0 + depth * depth * VISIBLE_DISTANCE;
+            let road = self.sample_road(sample_dist);
+            let road_half_full = (18.0 + depth * depth * 108.0) * road.width;
+            let road_half = road_half_full / ROAD_BUF_SCALE as f32;
+            let center = ROAD_BUF_W as f32 * 0.5
+                + (road.offset * (0.32 + depth * 0.55)) / ROAD_BUF_SCALE as f32
+                - self.player_x * road_half * 0.92;
+            let post_h = ((2.0 + depth * depth * 10.0) / ROAD_BUF_SCALE as f32).max(1.0) as u16;
+            let post_color = if ((sample_dist / 28.0) as i32 & 1) == 0 {
+                track.stripe_b
+            } else {
+                track.stripe_a
+            };
+            let left_x = clampf(center - road_half - 3.0, 0.0, (ROAD_BUF_W - 1) as f32) as i16;
+            let right_x = clampf(center + road_half + 2.0, 0.0, (ROAD_BUF_W - 1) as f32) as i16;
+            road_buffer_fill_rect(
+                buffer,
+                left_x,
+                row as i16 - post_h as i16,
+                1,
+                post_h,
+                post_color,
+            );
+            road_buffer_fill_rect(
+                buffer,
+                right_x,
+                row as i16 - post_h as i16,
+                1,
+                post_h,
+                post_color,
+            );
+            row = row
+                .saturating_add(((6.0 + depth * 12.0) / ROAD_BUF_SCALE as f32).max(1.0) as usize);
+        }
+    }
+
+    fn draw_buffer_decor(
+        &self,
+        buffer: &mut [u16; ROAD_BUF_PIXELS],
+        track: &TrackDefinition,
+        horizon_y: u16,
+        ui: &crate::display::Palette,
+    ) {
+        let mut row = full_to_road_y((horizon_y + 16) as f32).max(0) as usize;
+        while row + 2 < ROAD_BUF_H - 6 {
+            let full_y = VIEW_Y + row as u16 * ROAD_BUF_SCALE + ROAD_BUF_SCALE / 2;
+            let depth = (full_y - horizon_y) as f32 / (VIEW_Y + VIEW_H - horizon_y).max(1) as f32;
+            let sample_dist = self.distance + 22.0 + depth * depth * VISIBLE_DISTANCE;
+            if ((sample_dist / 54.0) as i32 & 1) != 0 {
+                row = row.saturating_add(
+                    ((10.0 + depth * 16.0) / ROAD_BUF_SCALE as f32).max(1.0) as usize
+                );
+                continue;
+            }
+            let road = self.sample_road(sample_dist);
+            let road_half_full = (18.0 + depth * depth * 108.0) * road.width;
+            let road_half = road_half_full / ROAD_BUF_SCALE as f32;
+            let center = ROAD_BUF_W as f32 * 0.5
+                + (road.offset * (0.32 + depth * 0.55)) / ROAD_BUF_SCALE as f32
+                - self.player_x * road_half * 0.92;
+            let decor_h = ((6.0 + depth * depth * 18.0) / ROAD_BUF_SCALE as f32).max(2.0) as u16;
+            let left_x = clampf(center - road_half - 4.0, 0.0, (ROAD_BUF_W - 3) as f32) as i16;
+            let right_x = clampf(center + road_half + 2.0, 0.0, (ROAD_BUF_W - 3) as f32) as i16;
+            draw_buffer_roadside_sprite(
+                buffer,
+                left_x,
+                row as i16,
+                decor_h,
+                self.selected_track,
+                track,
+                ui,
+            );
+            draw_buffer_roadside_sprite(
+                buffer,
+                right_x,
+                row as i16,
+                decor_h,
+                self.selected_track,
+                track,
+                ui,
+            );
+            row = row
+                .saturating_add(((14.0 + depth * 16.0) / ROAD_BUF_SCALE as f32).max(1.0) as usize);
         }
     }
 
@@ -1369,6 +1683,7 @@ impl PseudoRacerApp {
         );
     }
 
+    #[allow(dead_code)]
     fn draw_backdrop(
         &self,
         display: &mut Display,
@@ -1448,6 +1763,7 @@ impl PseudoRacerApp {
         }
     }
 
+    #[allow(dead_code)]
     fn draw_hills(
         &self,
         display: &mut Display,
@@ -1474,6 +1790,7 @@ impl PseudoRacerApp {
         }
     }
 
+    #[allow(dead_code)]
     fn draw_roadside_posts(&self, display: &mut Display, track: &TrackDefinition, horizon_y: u16) {
         let mut y = horizon_y + 8;
         while y < VIEW_Y + VIEW_H - 18 {
@@ -1505,6 +1822,7 @@ impl PseudoRacerApp {
         }
     }
 
+    #[allow(dead_code)]
     fn draw_roadside_decor(
         &self,
         display: &mut Display,
@@ -1677,6 +1995,9 @@ impl PseudoRacerApp {
     fn start_run(&mut self) {
         let track = &TRACKS[self.selected_track];
         self.state = RacerState::Countdown;
+        self.full_redraw_pending = true;
+        self.render_pending = true;
+        self.render_accum_ms = 0;
         self.countdown_ms = 2_800;
         self.elapsed_ms = 0;
         self.time_left_ms = track.checkpoint_time_ms;
@@ -1691,6 +2012,16 @@ impl PseudoRacerApp {
         self.checkpoint_index = 0;
         self.current_track_total = track_length(track);
         self.load_objects(track);
+    }
+
+    fn queue_runtime_frame(&mut self, dt_ms: u32) {
+        self.render_accum_ms = self
+            .render_accum_ms
+            .saturating_add(dt_ms.min(u16::MAX as u32) as u16);
+        if self.render_accum_ms >= RACER_FRAME_INTERVAL_MS {
+            self.render_accum_ms = self.render_accum_ms.saturating_sub(RACER_FRAME_INTERVAL_MS);
+            self.render_pending = true;
+        }
     }
 
     fn load_objects(&mut self, track: &TrackDefinition) {
@@ -1946,6 +2277,7 @@ fn draw_road_object(
     }
 }
 
+#[allow(dead_code)]
 fn draw_roadside_sprite(
     display: &mut Display,
     x: u16,
@@ -2021,6 +2353,119 @@ fn draw_roadside_sprite(
             );
         }
     }
+}
+
+fn road_buffer_clear(buffer: &mut [u16; ROAD_BUF_PIXELS], color: u16) {
+    for pixel in buffer.iter_mut() {
+        *pixel = color;
+    }
+}
+
+fn road_buffer_fill_rect(
+    buffer: &mut [u16; ROAD_BUF_PIXELS],
+    x: i16,
+    y: i16,
+    width: u16,
+    height: u16,
+    color: u16,
+) {
+    if width == 0 || height == 0 {
+        return;
+    }
+
+    let x0 = x.clamp(0, ROAD_BUF_W as i16);
+    let y0 = y.clamp(0, ROAD_BUF_H as i16);
+    let x1 = (x + width as i16).clamp(0, ROAD_BUF_W as i16);
+    let y1 = (y + height as i16).clamp(0, ROAD_BUF_H as i16);
+    if x1 <= x0 || y1 <= y0 {
+        return;
+    }
+
+    for row in y0 as usize..y1 as usize {
+        let start = row * ROAD_BUF_W + x0 as usize;
+        let end = row * ROAD_BUF_W + x1 as usize;
+        buffer[start..end].fill(color);
+    }
+}
+
+fn draw_buffer_roadside_sprite(
+    buffer: &mut [u16; ROAD_BUF_PIXELS],
+    x: i16,
+    baseline_y: i16,
+    size: u16,
+    track_index: usize,
+    track: &TrackDefinition,
+    ui: &crate::display::Palette,
+) {
+    let top = baseline_y.saturating_sub(size as i16);
+    match track_index {
+        0 => {
+            road_buffer_fill_rect(
+                buffer,
+                x + size as i16 / 3,
+                top,
+                (size / 6).max(1),
+                size,
+                color::rgb565(121, 82, 40),
+            );
+            road_buffer_fill_rect(
+                buffer,
+                x,
+                top + size as i16 / 5,
+                size.max(2),
+                (size / 3).max(1),
+                color::rgb565(52, 204, 132),
+            );
+            road_buffer_fill_rect(
+                buffer,
+                x + size as i16 / 5,
+                top,
+                (size * 3 / 5).max(2),
+                (size / 4).max(1),
+                color::rgb565(92, 230, 170),
+            );
+        }
+        1 => {
+            road_buffer_fill_rect(
+                buffer,
+                x,
+                top + size as i16 / 3,
+                size.max(2),
+                (size * 2 / 3).max(1),
+                color::mix(track.horizon, ui.shadow, 90),
+            );
+            road_buffer_fill_rect(
+                buffer,
+                x + size as i16 / 5,
+                top,
+                (size * 3 / 5).max(2),
+                (size / 3).max(1),
+                color::mix(track.horizon, ui.amber, 60),
+            );
+        }
+        _ => {
+            road_buffer_fill_rect(
+                buffer,
+                x + size as i16 / 3,
+                top + size as i16 / 4,
+                (size / 5).max(1),
+                (size * 3 / 4).max(1),
+                color::rgb565(110, 102, 174),
+            );
+            road_buffer_fill_rect(
+                buffer,
+                x,
+                top + size as i16 / 3,
+                size.max(2),
+                (size / 3).max(1),
+                color::mix(ui.cyan, track.sky, 60),
+            );
+        }
+    }
+}
+
+fn full_to_road_y(y: f32) -> i16 {
+    floorf((y - VIEW_Y as f32) / ROAD_BUF_SCALE as f32) as i16
 }
 
 fn clampf(value: f32, min: f32, max: f32) -> f32 {

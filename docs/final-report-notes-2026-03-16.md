@@ -23,8 +23,9 @@
 - `Diagnostics`
 - `Safe Mode`
 - `Dungeon Core`
-- `Auto Hunter`
-- `Tap Rush`
+- `Station Hunter`
+- `Pseudo Racer`
+- `Graphics Lab`
 
 也就是說，本專案的重點是「在資源非常有限的 MCU 上，做出有系統感、可互動、可維護的 MiniOS」。
 
@@ -67,7 +68,7 @@
 - `src/ui/`
   - Home / Settings / Diagnostics / About / Safe Mode 等系統畫面
 - `src/apps/`
-  - Album、Paint、Tap Rush、Auto Hunter 等 app-style 模組
+  - Album、Paint、Station Hunter、Pseudo Racer、Graphics Lab 等 app-style 模組
 - `src/dungeon/`
   - 獨立的重量級遊戲子系統
 - `src/storage.rs`
@@ -104,8 +105,9 @@
 ### 4.3 Game Center
 
 - `Dungeon Core`
-- `Auto Hunter`
-- `Tap Rush`
+- `Station Hunter`
+- `Pseudo Racer`
+- `Graphics Lab`
 
 ### 4.4 Pixel Paint
 
@@ -151,7 +153,7 @@
 
 ### 5.3 畫面閃爍問題
 
-在 `Album`、`Pixel Paint`、`Auto Hunter` 上，曾經遇到整頁重刷造成的閃爍。  
+在 `Album`、`Pixel Paint`、`Station Hunter` 上，曾經遇到整頁重刷造成的閃爍。  
 後來採用：
 
 - partial redraw
@@ -188,7 +190,7 @@
 - Home launcher
 - Album
 - Pixel Paint
-- Auto Hunter
+- Station Hunter
 - Dungeon Core
 - Diagnostics
 - Safe Mode
@@ -209,9 +211,9 @@
 預設 embedded 版目前量到：
 
 ```text
-text = 521,432
+text = 662,064
 data = 16
-bss  = 33,560
+bss  = 43,136
 ```
 
 這代表：
@@ -232,25 +234,17 @@ bss  = 33,560
 
 ## 9. 下一步最值得做的方向
 
-### 9.1 開機與桌面 polish
+### 9.1 音效與 chiptune
 
-這是最有展示效果的一步。  
-如果做得好，整個專案會從「很多功能的板子」變成「真的像一台小電腦」。
+目前系統已經有很完整的畫面層，如果之後再往前推，最值得補的是聲音層，讓整台 MiniOS 更像真正的復古電腦。
 
-### 9.2 Settings 捲動化
+### 9.2 更多 asset-light, math-heavy showcase
 
-當 app 和設定變多時，scrollable settings 會比硬擠在同一頁健康很多。
+像是更多 demo-scene 類效果、不同 viewport render 策略、甚至更完整的 graphics benchmark。
 
-### 9.3 復古桌面 icon 化
+### 9.3 Companion / 外部媒體
 
-把首頁從卡片 launcher 再往前推，做成：
-
-- 桌面背景
-- icon + label
-- 狀態列或小型 HUD
-- 像復古 GUI 的視覺語言
-
-這會非常符合專案主題。
+如果之後要把 Album 再往前推，最值得的是外部媒體與 host integration，而不是把更多圖片直接編進 firmware。
 
 ## 10. 一句話總結
 

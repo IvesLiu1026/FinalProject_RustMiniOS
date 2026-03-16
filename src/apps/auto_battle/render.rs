@@ -423,13 +423,26 @@ impl AutoBattleApp {
             );
             display.text(right_x, y + 7, &badge, ui.text, fill, 1);
             display.text(
-                right_x,
+                right_x + 36,
                 y + 18,
                 &format_u16(self.stage_best_kills(stage_index)),
                 ui.text_muted,
                 fill,
                 1,
             );
+            let best_wave = self.stage_best_wave(stage_index);
+            for boss_idx in 0..3u16 {
+                let cleared = best_wave >= (boss_idx as u8 + 1) * BOSS_INTERVAL;
+                let pip_x = right_x + boss_idx * 12;
+                let pip_fill = if cleared {
+                    color::mix(fill, ui.rose, 36)
+                } else {
+                    color::mix(fill, ui.shadow, 40)
+                };
+                let pip_border = if cleared { ui.rose } else { ui.steel };
+                display.fill_rect(pip_x, y + 20, 8, 6, pip_fill);
+                display.stroke_rect(pip_x, y + 20, 8, 6, 1, pip_border);
+            }
         } else {
             display.fill_rect(right_x, y + 7, 46, 12, color::mix(fill, ui.shadow, 40));
             display.stroke_rect(right_x, y + 7, 46, 12, 1, ui.steel);
@@ -448,6 +461,13 @@ impl AutoBattleApp {
         let ui = palette(theme);
         let cleared = self.state == BattleState::StageClear;
         let accent = if cleared { ui.lime } else { ui.rose };
+        let stage_index = self.result_summary.stage.saturating_sub(1) as usize;
+        let stage = self.stage_def(stage_index.min(STAGE_COUNT - 1));
+        let best_wave = self.stage_best_wave(stage_index.min(STAGE_COUNT - 1));
+        let best_kills = self.stage_best_kills(stage_index.min(STAGE_COUNT - 1));
+        let clear_count = self.stage_clear_count(stage_index.min(STAGE_COUNT - 1));
+        let result_score = station_hunter_result_score(&self.result_summary);
+        let result_grade = station_hunter_result_grade(result_score);
         draw_gradient_background(display, theme, 106);
         draw_shell_window(display, accent, &ui);
         draw_title_bar(
@@ -479,10 +499,34 @@ impl AutoBattleApp {
         );
         render_nav_back(display, zh_mode, ui.white, &ui);
 
+        display.panel(20, 44, 280, 18, ui.panel_alt, accent);
+        display.text(
+            28,
+            50,
+            if zh_mode {
+                stage.title_zh
+            } else {
+                stage.title_en
+            },
+            ui.text,
+            ui.panel_alt,
+            1,
+        );
+        display.fill_rect(244, 47, 48, 12, color::mix(ui.panel, accent, 22));
+        display.stroke_rect(244, 47, 48, 12, 1, accent);
+        display.centered_text(
+            268,
+            50,
+            result_grade,
+            ui.white,
+            color::mix(ui.panel, accent, 22),
+            1,
+        );
+
         draw_info_strip(
             display,
             20,
-            44,
+            66,
             132,
             if zh_mode { "關卡" } else { "STAGE" },
             &format_u8(self.result_summary.stage),
@@ -492,7 +536,7 @@ impl AutoBattleApp {
         draw_info_strip(
             display,
             164,
-            44,
+            66,
             136,
             if zh_mode { "波次" } else { "WAVE" },
             &format_u8(self.result_summary.wave_reached),
@@ -500,10 +544,10 @@ impl AutoBattleApp {
             &ui,
         );
 
-        display.panel(24, 72, 272, 92, ui.panel, accent);
+        display.panel(24, 90, 272, 86, ui.panel, accent);
         display.text(
             36,
-            84,
+            100,
             if zh_mode { "本局擊殺" } else { "RUN KILLS" },
             ui.text_muted,
             ui.panel,
@@ -511,7 +555,7 @@ impl AutoBattleApp {
         );
         display.text(
             140,
-            84,
+            100,
             &format_u16(self.result_summary.kills),
             ui.text,
             ui.panel,
@@ -519,7 +563,7 @@ impl AutoBattleApp {
         );
         display.text(
             36,
-            100,
+            114,
             if zh_mode { "永久經驗" } else { "PERMA XP" },
             ui.text_muted,
             ui.panel,
@@ -527,7 +571,7 @@ impl AutoBattleApp {
         );
         display.text(
             140,
-            100,
+            114,
             &format_u16(self.result_summary.xp_gain),
             ui.text,
             ui.panel,
@@ -535,7 +579,7 @@ impl AutoBattleApp {
         );
         display.text(
             36,
-            116,
+            128,
             if zh_mode {
                 "升級成長"
             } else {
@@ -547,7 +591,7 @@ impl AutoBattleApp {
         );
         display.text(
             140,
-            116,
+            128,
             &format_u8(self.result_summary.level_gained),
             ui.text,
             ui.panel,
@@ -555,7 +599,7 @@ impl AutoBattleApp {
         );
         display.text(
             36,
-            132,
+            142,
             if zh_mode {
                 "升級點數"
             } else {
@@ -567,12 +611,38 @@ impl AutoBattleApp {
         );
         display.text(
             140,
-            132,
+            142,
             &format_u8(self.result_summary.upgrade_points_gain),
             ui.text,
             ui.panel,
             1,
         );
+        display.text(
+            196,
+            100,
+            if zh_mode { "分數" } else { "SCORE" },
+            ui.text_muted,
+            ui.panel,
+            1,
+        );
+        display.text(236, 100, &format_u16(result_score), accent, ui.panel, 1);
+        let mut best_line: String<24> = String::new();
+        let _ = write!(
+            &mut best_line,
+            "{} {} / {}",
+            if zh_mode { "紀錄" } else { "BEST" },
+            best_wave,
+            best_kills
+        );
+        display.text(196, 114, &best_line, ui.text, ui.panel, 1);
+        let mut clear_line: String<24> = String::new();
+        let _ = write!(
+            &mut clear_line,
+            "{} {}",
+            if zh_mode { "通關次數" } else { "CLEARS" },
+            clear_count
+        );
+        display.text(196, 128, &clear_line, ui.text_muted, ui.panel, 1);
         if let Some(unlocked) = self.result_summary.unlocked_stage {
             let mut unlock_text: String<24> = String::new();
             let _ = write!(
@@ -581,7 +651,7 @@ impl AutoBattleApp {
                 if zh_mode { "解鎖關卡" } else { "UNLOCKED" },
                 unlocked
             );
-            display.text(36, 148, &unlock_text, accent, ui.panel, 1);
+            display.text(196, 142, &unlock_text, accent, ui.panel, 1);
         }
 
         let labels = if cleared {
@@ -596,7 +666,7 @@ impl AutoBattleApp {
             )
         };
         for index in 0..2 {
-            let y = RESULT_BUTTON_Y + index as u16 * (RESULT_BUTTON_H + RESULT_BUTTON_GAP);
+            let y = 184 + index as u16 * (RESULT_BUTTON_H + RESULT_BUTTON_GAP);
             let selected = self.result_choice == index;
             let fill = if selected { ui.panel_alt } else { ui.panel };
             let border = if selected { accent } else { ui.steel };
@@ -1410,14 +1480,23 @@ impl AutoBattleApp {
             self.health.max(0),
             self.max_health.max(1)
         );
-        let mut kills_text: String<16> = String::new();
-        let _ = write!(&mut kills_text, "K {}", self.kills);
+        let kills_text = format_u16(self.kills);
+        let mut best_text: String<16> = String::new();
+        let _ = write!(
+            &mut best_text,
+            "B{}",
+            self.stage_best_kills(self.stage_index())
+        );
+        let mut stage_text: String<8> = String::new();
+        let _ = write!(&mut stage_text, "S{}", self.current_stage);
 
-        display.panel(PANEL_X + 8, PANEL_Y + 6, 52, 12, shell, ui.lime);
+        display.panel(PANEL_X + 8, PANEL_Y + 6, 42, 12, shell, ui.lime);
         display.text(PANEL_X + 12, PANEL_Y + 9, "HP", ui.text_muted, shell, 1);
-        display.text(PANEL_X + 28, PANEL_Y + 9, &hp_text, ui.text, shell, 1);
-        display.panel(PANEL_X + 66, PANEL_Y + 6, 50, 12, shell, ui.cyan);
-        display.text(PANEL_X + 72, PANEL_Y + 9, &kills_text, ui.text, shell, 1);
+        display.text(PANEL_X + 24, PANEL_Y + 9, &hp_text, ui.text, shell, 1);
+        display.panel(PANEL_X + 54, PANEL_Y + 6, 30, 12, shell, ui.cyan);
+        display.text(PANEL_X + 58, PANEL_Y + 9, &kills_text, ui.text, shell, 1);
+        display.panel(PANEL_X + 84, PANEL_Y + 6, 32, 12, shell, ui.amber);
+        display.text(PANEL_X + 92, PANEL_Y + 9, &stage_text, ui.text, shell, 1);
 
         display.text(
             PANEL_X + 8,
@@ -1543,6 +1622,15 @@ impl AutoBattleApp {
             shell,
             1,
         );
+        let best_width = display.measure_text(&best_text, 1);
+        display.text(
+            PANEL_X + PANEL_W - best_width - 8,
+            PANEL_Y + 54,
+            &best_text,
+            ui.text,
+            shell,
+            1,
+        );
     }
 
     fn render_wave_banner(
@@ -1657,4 +1745,23 @@ fn format_u16(value: u16) -> String<12> {
     let mut out = String::<12>::new();
     let _ = write!(&mut out, "{}", value);
     out
+}
+
+fn station_hunter_result_score(summary: &ResultSummary) -> u16 {
+    let score = summary.kills as u32 * 7
+        + summary.wave_reached as u32 * 12
+        + summary.xp_gain as u32 * 2
+        + summary.level_gained as u32 * 36
+        + summary.upgrade_points_gain as u32 * 28;
+    score.min(u16::MAX as u32) as u16
+}
+
+fn station_hunter_result_grade(score: u16) -> &'static str {
+    match score {
+        720..=u16::MAX => "S",
+        560..=719 => "A",
+        420..=559 => "B",
+        300..=419 => "C",
+        _ => "D",
+    }
 }

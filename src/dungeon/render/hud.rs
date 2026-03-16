@@ -18,6 +18,8 @@ impl DungeonApp {
         fps: u16,
     ) {
         let map_name = hud_map_name(self.map_index, zh_mode);
+        let active_enemies = self.enemies.iter().filter(|enemy| enemy.alive).count() as u16;
+        let active_pickups = self.pickups.iter().filter(|pickup| pickup.active).count() as u16;
 
         if force || self.prev_hud_fps != fps {
             let mut fps_line: String<16> = String::new();
@@ -119,24 +121,43 @@ impl DungeonApp {
         let exit_active = self.exit_hold_ms > 0;
         if force || self.prev_hud_exit_hold != exit_active {
             display.fill_rect(206, 144, 102, 18, ui.panel_alt);
-            display.text(
-                212,
-                150,
-                if exit_active {
+            if exit_active {
+                display.text(
+                    212,
+                    150,
                     if zh_mode {
                         "返回主頁中"
                     } else {
                         "EXITING"
-                    }
-                } else if zh_mode {
-                    "長按返回"
-                } else {
-                    "HOLD EXIT"
-                },
-                ui.text_muted,
-                ui.panel_alt,
-                1,
-            );
+                    },
+                    ui.text_muted,
+                    ui.panel_alt,
+                    1,
+                );
+            } else {
+                let mut objective: String<24> = String::new();
+                let _ = write!(
+                    &mut objective,
+                    "{} {} / {} {}",
+                    if zh_mode { "敵" } else { "ENM" },
+                    active_enemies,
+                    if zh_mode { "補" } else { "MED" },
+                    active_pickups
+                );
+                display.text(212, 146, &objective, ui.text, ui.panel_alt, 1);
+                display.text(
+                    212,
+                    154,
+                    if zh_mode {
+                        "長按返回主頁"
+                    } else {
+                        "HOLD TO EXIT"
+                    },
+                    ui.text_muted,
+                    ui.panel_alt,
+                    1,
+                );
+            }
             self.prev_hud_exit_hold = exit_active;
         }
     }

@@ -3,7 +3,7 @@ use crate::dungeon::RenderStrategy;
 
 use super::{
     draw_footer_hint, draw_gradient_background, draw_info_strip, draw_scrollbar, draw_shell_window,
-    draw_title_bar, render_nav_back, theme_mode_label, SHELL_CONTENT_X,
+    draw_title_bar, fit_text_to_width, render_nav_back, theme_mode_label, SHELL_CONTENT_X,
 };
 
 pub const SETTINGS_VIEWPORT_X: u16 = SHELL_CONTENT_X;
@@ -13,7 +13,7 @@ pub const SETTINGS_VIEWPORT_H: u16 = 140;
 pub const SETTINGS_SCROLLBAR_X: u16 = SETTINGS_VIEWPORT_X + SETTINGS_VIEWPORT_W + 4;
 pub const SETTINGS_ROW_HEIGHT: u16 = 24;
 pub const SETTINGS_VISIBLE_ROWS: usize = 5;
-pub const SETTINGS_TOTAL_ROWS: usize = 10;
+pub const SETTINGS_TOTAL_ROWS: usize = 12;
 
 pub fn settings_max_scroll_top() -> usize {
     SETTINGS_TOTAL_ROWS.saturating_sub(SETTINGS_VISIBLE_ROWS)
@@ -26,8 +26,10 @@ pub fn settings_visual_row_for_item(item_index: usize) -> usize {
         2 => 3,
         3 => 5,
         4 => 6,
-        5 => 8,
-        _ => 9,
+        5 => 7,
+        6 => 9,
+        7 => 10,
+        _ => 11,
     }
 }
 
@@ -38,8 +40,10 @@ pub fn settings_item_for_visual_row(visual_row: usize) -> Option<usize> {
         3 => Some(2),
         5 => Some(3),
         6 => Some(4),
-        8 => Some(5),
+        7 => Some(5),
         9 => Some(6),
+        10 => Some(7),
+        11 => Some(8),
         _ => None,
     }
 }
@@ -146,22 +150,30 @@ pub fn render_settings(
         1,
         ui.steel,
     );
-    display.text(
-        SETTINGS_VIEWPORT_X + 10,
-        SETTINGS_VIEWPORT_Y + 8,
+    let header_left = fit_text_to_width(
+        display,
         if zh_mode {
             "控制台項目"
         } else {
             "CONTROL PANEL ITEMS"
         },
+        132,
+        1,
+    );
+    let header_right =
+        fit_text_to_width(display, if zh_mode { "K1 套用" } else { "K1 APPLY" }, 66, 1);
+    display.text(
+        SETTINGS_VIEWPORT_X + 10,
+        SETTINGS_VIEWPORT_Y + 8,
+        &header_left,
         ui.text,
         ui.panel,
         1,
     );
     display.text(
-        SETTINGS_VIEWPORT_X + 174,
+        SETTINGS_VIEWPORT_X + 224,
         SETTINGS_VIEWPORT_Y + 8,
-        if zh_mode { "K1 套用" } else { "K1 APPLY" },
+        &header_right,
         ui.text_muted,
         ui.panel,
         1,
@@ -197,9 +209,9 @@ pub fn render_settings(
     draw_footer_hint(
         display,
         if zh_mode {
-            "ROW-SNAPPED SCROLL  DRAG LIST OR USE K0/WK"
+            "列對齊捲動  可拖曳或用 K0/WK 切換"
         } else {
-            "ROW-SNAPPED SCROLL  DRAG LIST OR USE K0/WK"
+            "ROW-SNAPPED SCROLL  DRAG OR USE K0/WK"
         },
         accent,
         &ui,
@@ -268,7 +280,15 @@ fn render_settings_row(
         if selected {
             display.fill_rect(SETTINGS_VIEWPORT_X + 22, y + 4, 2, 16, accent);
         }
-        display.text(SETTINGS_VIEWPORT_X + 30, y + 8, title, ui.text, fill, 1);
+        let title_text = fit_text_to_width(display, title, 140, 1);
+        display.text(
+            SETTINGS_VIEWPORT_X + 30,
+            y + 8,
+            &title_text,
+            ui.text,
+            fill,
+            1,
+        );
         display.fill_rect(
             SETTINGS_VIEWPORT_X + 182,
             y + 6,
@@ -277,12 +297,13 @@ fn render_settings_row(
             color_box(fill, accent, ui),
         );
         display.stroke_rect(SETTINGS_VIEWPORT_X + 182, y + 6, 72, 12, 1, accent);
-        let detail_width = display.measure_text(detail, 1);
+        let detail_text = fit_text_to_width(display, detail, 58, 1);
+        let detail_width = display.measure_text(&detail_text, 1);
         let detail_x = SETTINGS_VIEWPORT_X + 182 + 36 - detail_width / 2;
         display.text(
             detail_x,
             y + 9,
-            detail,
+            &detail_text,
             ui.text,
             color_box(fill, accent, ui),
             1,
@@ -299,7 +320,7 @@ fn section_for_row(visual_row: usize, zh_mode: bool) -> Option<(&'static str, u1
     match visual_row {
         0 => Some((if zh_mode { "外觀" } else { "APPEARANCE" }, 1)),
         4 => Some((if zh_mode { "系統" } else { "SYSTEM" }, 2)),
-        7 => Some((
+        8 => Some((
             if zh_mode {
                 "修復與資訊"
             } else {
@@ -362,6 +383,24 @@ fn setting_row(
             ui.orange,
         ),
         5 => (
+            if zh_mode {
+                "展示模式"
+            } else {
+                "SHOWCASE MODE"
+            },
+            if zh_mode { "輪播" } else { "AUTO" },
+            ui.amber,
+        ),
+        6 => (
+            if zh_mode {
+                "效能儀表"
+            } else {
+                "PERFORMANCE"
+            },
+            if zh_mode { "監看" } else { "LIVE" },
+            ui.lime,
+        ),
+        7 => (
             if zh_mode {
                 "系統診斷"
             } else {

@@ -19,6 +19,7 @@ fn main() {
     println!("cargo:rerun-if-changed=memory.x");
     println!("cargo:rerun-if-changed=c_support/clock/hardware_system_init.c");
     println!("cargo:rerun-if-changed=c_support/tft");
+    println!("cargo:rerun-if-changed=c_support/tjpgd3");
     println!("cargo:rerun-if-env-changed=PLATFORMIO_PACKAGES_DIR");
     println!("cargo:rerun-if-env-changed=MINIOS_EMBED_ALBUM");
     println!("cargo:rustc-check-cfg=cfg(minios_mac_companion)");
@@ -42,6 +43,7 @@ fn main() {
             .archiver(&ar)
             .include(project_root.join("c_support/tft/include"))
             .include(project_root.join("c_support/clock"))
+            .include(project_root.join("c_support/tjpgd3/src"))
             .include(&cmsis_core)
             .include(&cmsis_device)
             .flag("-mcpu=cortex-m4")
@@ -69,6 +71,8 @@ fn main() {
     for file in [
         "c_support/tft/src/stm324xg_lcd_ILI9341_Pro.c",
         "c_support/tft/src/stm32f4xx_fsmc.c",
+        "c_support/tjpgd3/src/tjpgd.c",
+        "c_support/tjpgd3/src/tjpgd_user.c",
         "c_support/tft/src/Fonts/font8.c",
         "c_support/tft/src/Fonts/font12.c",
         "c_support/tft/src/Fonts/font16.c",

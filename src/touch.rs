@@ -174,8 +174,9 @@ impl Touch {
     }
 
     fn sample_raw(&self, raw_x: &mut u16, raw_y: &mut u16) -> bool {
+        let exti_hint = board::take_touch_exti_hint();
         let irq_active = board::touch_irq_active();
-        if !irq_active {
+        if !irq_active && !exti_hint {
             return false;
         }
         let sample_x = average_samples(TOUCH_X_COMMAND);

@@ -13,13 +13,13 @@ use crate::ui::{
 
 use super::touch_released_in_rect;
 
-const LAB_W: usize = 32;
-const LAB_H: usize = 24;
+const LAB_W: usize = 60;
+const LAB_H: usize = 36;
 const LAB_PIXELS: usize = LAB_W * LAB_H;
-const LAB_SCALE: u16 = 8;
-const LAB_X: u16 = 32;
-const LAB_Y: u16 = 40;
-const MAX_STARS: usize = 40;
+const LAB_SCALE: u16 = 5;
+const LAB_X: u16 = 10;
+const LAB_Y: u16 = 24;
+const MAX_STARS: usize = 72;
 const MODE_COUNT: usize = 6;
 const CARD_X: u16 = 22;
 const CARD_Y: u16 = 58;
@@ -27,6 +27,23 @@ const CARD_W: u16 = 134;
 const CARD_H: u16 = 46;
 const CARD_GAP_X: u16 = 12;
 const CARD_GAP_Y: u16 = 10;
+const LAB_FRAME_INTERVAL_MS: u16 = 66;
+const RUN_BACK_X: u16 = 8;
+const RUN_BACK_Y: u16 = 4;
+const RUN_BACK_W: u16 = 52;
+const RUN_BACK_H: u16 = 16;
+const RUN_MODE_X: u16 = 70;
+const RUN_MODE_Y: u16 = 4;
+const RUN_MODE_W: u16 = 130;
+const RUN_MODE_H: u16 = 16;
+const RUN_TIME_X: u16 = 248;
+const RUN_TIME_Y: u16 = 4;
+const RUN_TIME_W: u16 = 64;
+const RUN_TIME_H: u16 = 16;
+const RUN_INFO_X: u16 = 10;
+const RUN_INFO_Y: u16 = 208;
+const RUN_INFO_W: u16 = 300;
+const RUN_INFO_H: u16 = 22;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum GraphicsLabAction {
@@ -69,6 +86,9 @@ pub struct GraphicsLabApp {
     state: GraphicsLabState,
     selected_mode: usize,
     info_overlay: bool,
+    full_redraw_pending: bool,
+    render_pending: bool,
+    render_accum_ms: u16,
     ticks_ms: u32,
     seed: u32,
     frame: [u16; LAB_PIXELS],
@@ -82,6 +102,9 @@ impl GraphicsLabApp {
             state: GraphicsLabState::Select,
             selected_mode: 0,
             info_overlay: true,
+            full_redraw_pending: false,
+            render_pending: false,
+            render_accum_ms: 0,
             ticks_ms: 0,
             seed: 0x00A1_40EF,
             frame: [0; LAB_PIXELS],
@@ -95,6 +118,19 @@ impl GraphicsLabApp {
         self.info_overlay = true;
         self.ticks_ms = 0;
         self.prime_mode();
+        self.full_redraw_pending = true;
+        self.render_pending = true;
+        self.render_accum_ms = 0;
+    }
+
+    pub fn start_showcase(&mut self, mode_index: usize) {
+        self.selected_mode = mode_index % MODE_COUNT;
+        self.state = GraphicsLabState::Run;
+        self.prime_mode();
+        self.info_overlay = false;
+        self.full_redraw_pending = true;
+        self.render_pending = true;
+        self.render_accum_ms = 0;
     }
 
     pub fn update(
@@ -103,29 +139,45 @@ impl GraphicsLabApp {
         touch: &TouchState,
         dt_ms: u32,
     ) -> GraphicsLabAction {
-        if input.home_chord()
-            || touch_released_in_rect(touch, NAV_BACK_X, NAV_BACK_Y, NAV_BACK_W, NAV_BACK_H)
-        {
-            self.state = GraphicsLabState::Select;
-            return GraphicsLabAction::ExitGameCenter;
-        }
-
         match self.state {
-            GraphicsLabState::Select => self.update_select(input, touch),
+            GraphicsLabState::Select => {
+                if input.home_chord()
+                    || touch_released_in_rect(touch, NAV_BACK_X, NAV_BACK_Y, NAV_BACK_W, NAV_BACK_H)
+                {
+                    self.state = GraphicsLabState::Select;
+                    return GraphicsLabAction::ExitGameCenter;
+                }
+                self.update_select(input, touch)
+            }
             GraphicsLabState::Run => {
+                if input.home_chord()
+                    || touch_released_in_rect(touch, RUN_BACK_X, RUN_BACK_Y, RUN_BACK_W, RUN_BACK_H)
+                {
+                    self.state = GraphicsLabState::Select;
+                    self.full_redraw_pending = true;
+                    self.render_pending = true;
+                    return GraphicsLabAction::Stay;
+                }
                 if input.k0_just_pressed {
                     self.selected_mode = (self.selected_mode + MODE_COUNT - 1) % MODE_COUNT;
                     self.prime_mode();
+                    self.render_pending = true;
+                    self.full_redraw_pending = true;
                 }
                 if input.wkup_just_pressed {
                     self.selected_mode = (self.selected_mode + 1) % MODE_COUNT;
                     self.prime_mode();
+                    self.render_pending = true;
+                    self.full_redraw_pending = true;
                 }
                 if input.k1_just_pressed {
                     self.info_overlay = !self.info_overlay;
+                    self.render_pending = true;
+                    self.full_redraw_pending = true;
                 }
                 self.ticks_ms = self.ticks_ms.saturating_add(dt_ms);
                 self.update_dynamic_effects(dt_ms);
+                self.queue_runtime_frame(dt_ms);
             }
         }
 
@@ -133,46 +185,87 @@ impl GraphicsLabApp {
     }
 
     pub fn needs_animation(&self) -> bool {
+        matches!(self.state, GraphicsLabState::Run) && self.render_pending
+    }
+
+    pub fn take_full_redraw_request(&mut self) -> bool {
+        let redraw = self.full_redraw_pending;
+        self.full_redraw_pending = false;
+        redraw
+    }
+
+    pub fn take_render_request(&mut self) -> bool {
+        let redraw = self.render_pending;
+        self.render_pending = false;
+        redraw
+    }
+
+    pub fn can_partial_render(&self) -> bool {
         matches!(self.state, GraphicsLabState::Run)
     }
 
     pub fn render(&mut self, display: &mut Display, theme: ThemeMode, zh_mode: bool) {
-        let ui = palette(theme);
-        draw_gradient_background(display, theme, 120);
-        draw_shell_window(display, ui.lime, &ui);
-        draw_title_bar(
-            display,
-            if zh_mode {
-                "圖學實驗室"
-            } else {
-                "GRAPHICS LAB"
-            },
-            if zh_mode {
-                "starfield / plasma / wireframe / fire"
-            } else {
-                "starfield / plasma / wireframe / fire"
-            },
-            ui.lime,
-            &ui,
-        );
-        render_nav_back(display, zh_mode, ui.white, &ui);
-
         match self.state {
-            GraphicsLabState::Select => self.render_select(display, zh_mode, &ui),
-            GraphicsLabState::Run => self.render_runtime(display, zh_mode, &ui),
+            GraphicsLabState::Select => {
+                let ui = palette(theme);
+                draw_gradient_background(display, theme, 120);
+                draw_shell_window(display, ui.lime, &ui);
+                draw_title_bar(
+                    display,
+                    if zh_mode {
+                        "圖學實驗室"
+                    } else {
+                        "GRAPHICS LAB"
+                    },
+                    if zh_mode {
+                        "starfield / plasma / wireframe / fire"
+                    } else {
+                        "starfield / plasma / wireframe / fire"
+                    },
+                    ui.lime,
+                    &ui,
+                );
+                render_nav_back(display, zh_mode, ui.white, &ui);
+                self.render_select(display, zh_mode, &ui);
+            }
+            GraphicsLabState::Run => {
+                let ui = palette(theme);
+                display.fill_rect(0, 0, 320, 240, color::mix(ui.shadow, ui.indigo, 28));
+                display.stroke_rect(
+                    LAB_X.saturating_sub(2),
+                    LAB_Y.saturating_sub(2),
+                    LAB_W as u16 * LAB_SCALE + 4,
+                    LAB_H as u16 * LAB_SCALE + 4,
+                    1,
+                    mode_accent(mode_from_index(self.selected_mode), &ui),
+                );
+                self.render_runtime(display, zh_mode, &ui);
+            }
         }
+    }
+
+    pub fn render_partial(&mut self, display: &mut Display, theme: ThemeMode, zh_mode: bool) {
+        if !self.can_partial_render() {
+            self.render(display, theme, zh_mode);
+            return;
+        }
+        let ui = palette(theme);
+        self.render_runtime(display, zh_mode, &ui);
     }
 
     fn update_select(&mut self, input: &ButtonSnapshot, touch: &TouchState) {
         if input.k0_just_pressed {
             self.selected_mode = (self.selected_mode + MODE_COUNT - 1) % MODE_COUNT;
+            self.full_redraw_pending = true;
         }
         if input.wkup_just_pressed {
             self.selected_mode = (self.selected_mode + 1) % MODE_COUNT;
+            self.full_redraw_pending = true;
         }
         if input.k1_just_pressed {
             self.state = GraphicsLabState::Run;
             self.prime_mode();
+            self.full_redraw_pending = true;
             return;
         }
 
@@ -183,9 +276,11 @@ impl GraphicsLabApp {
                     if self.selected_mode == index {
                         self.state = GraphicsLabState::Run;
                         self.prime_mode();
+                        self.render_pending = true;
                     } else {
                         self.selected_mode = index;
                     }
+                    self.full_redraw_pending = true;
                     return;
                 }
             }
@@ -272,21 +367,6 @@ impl GraphicsLabApp {
         ui: &crate::display::Palette,
     ) {
         self.render_mode_frame();
-        display.fill_rect(
-            LAB_X - 4,
-            LAB_Y - 4,
-            LAB_W as u16 * LAB_SCALE + 8,
-            LAB_H as u16 * LAB_SCALE + 8,
-            ui.panel,
-        );
-        display.stroke_rect(
-            LAB_X - 4,
-            LAB_Y - 4,
-            LAB_W as u16 * LAB_SCALE + 8,
-            LAB_H as u16 * LAB_SCALE + 8,
-            1,
-            mode_accent(mode_from_index(self.selected_mode), ui),
-        );
         display.draw_rgb565_scaled(
             LAB_X,
             LAB_Y,
@@ -298,17 +378,41 @@ impl GraphicsLabApp {
 
         let mode = mode_from_index(self.selected_mode);
         display.fill_rect(
-            18,
-            204,
-            284,
-            18,
+            RUN_BACK_X,
+            RUN_BACK_Y,
+            RUN_BACK_W,
+            RUN_BACK_H,
+            color::mix(ui.panel, ui.shadow, 36),
+        );
+        display.stroke_rect(RUN_BACK_X, RUN_BACK_Y, RUN_BACK_W, RUN_BACK_H, 1, ui.white);
+        display.centered_text(
+            RUN_BACK_X + RUN_BACK_W / 2,
+            RUN_BACK_Y + 4,
+            if zh_mode { "返回" } else { "BACK" },
+            ui.text,
+            color::mix(ui.panel, ui.shadow, 36),
+            1,
+        );
+
+        display.fill_rect(
+            RUN_MODE_X,
+            RUN_MODE_Y,
+            RUN_MODE_W,
+            RUN_MODE_H,
             color::mix(ui.panel_alt, mode_accent(mode, ui), 22),
         );
-        display.stroke_rect(18, 204, 284, 18, 1, mode_accent(mode, ui));
+        display.stroke_rect(
+            RUN_MODE_X,
+            RUN_MODE_Y,
+            RUN_MODE_W,
+            RUN_MODE_H,
+            1,
+            mode_accent(mode, ui),
+        );
         display.text(
-            24,
-            209,
-            &fit_text(display, mode_name(mode, zh_mode), 110),
+            RUN_MODE_X + 8,
+            RUN_MODE_Y + 4,
+            &fit_text(display, mode_name(mode, zh_mode), RUN_MODE_W - 16),
             ui.text,
             color::mix(ui.panel_alt, mode_accent(mode, ui), 22),
             1,
@@ -322,53 +426,57 @@ impl GraphicsLabApp {
             self.ticks_ms / 1000,
             (self.ticks_ms % 1000) / 100
         );
+        display.fill_rect(
+            RUN_TIME_X,
+            RUN_TIME_Y,
+            RUN_TIME_W,
+            RUN_TIME_H,
+            color::mix(ui.panel, ui.shadow, 36),
+        );
+        display.stroke_rect(RUN_TIME_X, RUN_TIME_Y, RUN_TIME_W, RUN_TIME_H, 1, ui.cyan);
         display.text(
-            224,
-            209,
+            RUN_TIME_X + 6,
+            RUN_TIME_Y + 4,
             &tick_line,
             ui.white,
-            color::mix(ui.panel_alt, mode_accent(mode, ui), 22),
+            color::mix(ui.panel, ui.shadow, 36),
             1,
         );
 
         if self.info_overlay {
-            display.fill_rect(40, 54, 108, 32, color::mix(ui.panel, ui.shadow, 28));
-            display.stroke_rect(40, 54, 108, 32, 1, ui.white);
-            let info_line = fit_text(display, mode_tagline(mode, zh_mode), 92);
-            let hint_line = fit_text(display, mode_hint(mode, zh_mode), 92);
+            display.fill_rect(
+                RUN_INFO_X,
+                RUN_INFO_Y,
+                RUN_INFO_W,
+                RUN_INFO_H,
+                color::mix(ui.panel, ui.shadow, 36),
+            );
+            display.stroke_rect(RUN_INFO_X, RUN_INFO_Y, RUN_INFO_W, RUN_INFO_H, 1, ui.white);
+            let info_line = fit_text(display, mode_tagline(mode, zh_mode), RUN_INFO_W - 20);
+            let hint_line = fit_text(display, mode_hint(mode, zh_mode), RUN_INFO_W - 20);
             display.text(
-                48,
-                60,
+                RUN_INFO_X + 8,
+                RUN_INFO_Y + 4,
                 &info_line,
                 ui.text,
-                color::mix(ui.panel, ui.shadow, 28),
+                color::mix(ui.panel, ui.shadow, 36),
                 1,
             );
             display.text(
-                48,
-                72,
+                RUN_INFO_X + 8,
+                RUN_INFO_Y + 14,
                 &hint_line,
                 ui.text_muted,
-                color::mix(ui.panel, ui.shadow, 28),
+                color::mix(ui.panel, ui.shadow, 36),
                 1,
             );
         }
-
-        draw_footer_hint(
-            display,
-            if zh_mode {
-                "K0/WK 切模式  K1 開關資訊  K0+WK 返回"
-            } else {
-                "K0/WK NEXT MODE  K1 INFO  K0+WK EXIT"
-            },
-            mode_accent(mode, ui),
-            ui,
-        );
     }
 
     fn prime_mode(&mut self) {
         self.ticks_ms = 0;
         self.info_overlay = true;
+        self.render_accum_ms = 0;
         self.frame = [0; LAB_PIXELS];
         if matches!(mode_from_index(self.selected_mode), LabMode::Fire) {
             self.fire = [0; LAB_PIXELS];
@@ -385,6 +493,16 @@ impl GraphicsLabApp {
             LabMode::Starfield => self.update_starfield(dt_ms),
             LabMode::Fire => self.update_fire(),
             _ => {}
+        }
+    }
+
+    fn queue_runtime_frame(&mut self, dt_ms: u32) {
+        self.render_accum_ms = self
+            .render_accum_ms
+            .saturating_add(dt_ms.min(u16::MAX as u32) as u16);
+        if self.render_accum_ms >= LAB_FRAME_INTERVAL_MS {
+            self.render_accum_ms = self.render_accum_ms.saturating_sub(LAB_FRAME_INTERVAL_MS);
+            self.render_pending = true;
         }
     }
 

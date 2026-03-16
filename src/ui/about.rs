@@ -7,7 +7,7 @@ use crate::system_info;
 
 use super::{
     draw_footer_hint, draw_gradient_background, draw_info_strip, draw_shell_window, draw_title_bar,
-    render_nav_back,
+    fit_text_to_width, render_nav_back,
 };
 
 pub fn render_about(display: &mut Display, theme: ThemeMode, zh_mode: bool, safe_boot: bool) {
@@ -33,27 +33,20 @@ pub fn render_about(display: &mut Display, theme: ThemeMode, zh_mode: bool, safe
     display.fill_rect(31, 65, 18, 9, color::mix(ui.cyan, ui.white, 74));
     display.stroke_rect(31, 65, 18, 9, 1, ui.indigo);
     display.fill_rect(36, 76, 8, 2, ui.shadow);
-    display.text(62, 62, "MiniOS 95", ui.text, ui.panel_alt, 2);
-    display.text(
-        62,
-        80,
+    display.text(62, 62, "MiniOS 95", ui.text, ui.panel_alt, 1);
+    let hardware_line = fit_text_to_width(
+        display,
         if zh_mode {
             "STM32F407ZG + ILI9341 + 電阻觸控"
         } else {
             "STM32F407ZG + ILI9341 + RESISTIVE TOUCH"
         },
-        ui.text_muted,
-        ui.panel_alt,
+        164,
         1,
     );
-    display.text(
-        62,
-        92,
-        system_info::build_target(),
-        ui.text_muted,
-        ui.panel_alt,
-        1,
-    );
+    display.text(62, 76, &hardware_line, ui.text_muted, ui.panel_alt, 1);
+    let build_target = fit_text_to_width(display, system_info::build_target(), 164, 1);
+    display.text(62, 88, &build_target, ui.text_muted, ui.panel_alt, 1);
     draw_about_lamps(display, 248, 62, safe_boot, &ui);
 
     let mut version_line: String<48> = String::new();
@@ -94,14 +87,9 @@ pub fn render_about(display: &mut Display, theme: ThemeMode, zh_mode: bool, safe
     );
 
     display.panel(18, 128, 136, 78, ui.panel, ui.orange);
-    display.text(
-        28,
-        140,
-        if zh_mode { "媒體庫" } else { "MEDIA LIB" },
-        ui.text,
-        ui.panel,
-        2,
-    );
+    let media_title =
+        fit_text_to_width(display, if zh_mode { "媒體庫" } else { "MEDIA LIB" }, 74, 1);
+    display.text(28, 140, &media_title, ui.text, ui.panel, 1);
     draw_media_shelf_icon(display, 114, 138, &ui);
     let mut still_line: String<24> = String::new();
     let _ = write!(&mut still_line, "{}", system_info::still_count());
@@ -129,14 +117,13 @@ pub fn render_about(display: &mut Display, theme: ThemeMode, zh_mode: bool, safe
     );
 
     display.panel(166, 128, 136, 78, ui.panel, ui.rose);
-    display.text(
-        176,
-        140,
+    let hardware_title = fit_text_to_width(
+        display,
         if zh_mode { "機器資訊" } else { "HARDWARE" },
-        ui.text,
-        ui.panel,
-        2,
+        74,
+        1,
     );
+    display.text(176, 140, &hardware_title, ui.text, ui.panel, 1);
     draw_chip_icon(display, 264, 138, &ui);
     draw_info_strip(
         display,

@@ -49,7 +49,14 @@ impl DungeonApp {
         self.draw_hud(display, &ui, zh_mode, full_refresh, fps);
 
         if self.intro_ms > 0 {
-            draw_intro_overlay(display, &ui, self.current_map(), zh_mode);
+            draw_intro_overlay(
+                display,
+                &ui,
+                self.current_map(),
+                zh_mode,
+                self.current_map().enemies.len() as u8,
+                self.current_map().pickups.len() as u8,
+            );
         } else if self.game_over {
             draw_overlay(
                 display,
@@ -67,6 +74,14 @@ impl DungeonApp {
                     "MAP SELECT"
                 },
                 ui.rose,
+                if zh_mode {
+                    self.current_map().name_zh
+                } else {
+                    self.current_map().name_en
+                },
+                self.score,
+                self.kills,
+                zh_mode,
             );
         } else if self.level_cleared {
             draw_overlay(
@@ -89,6 +104,14 @@ impl DungeonApp {
                     "MAP SELECT"
                 },
                 ui.lime,
+                if zh_mode {
+                    self.current_map().name_zh
+                } else {
+                    self.current_map().name_en
+                },
+                self.score,
+                self.kills,
+                zh_mode,
             );
         }
     }

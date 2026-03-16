@@ -92,12 +92,11 @@ const HOME_APPS: [AppId; 4] = [
     AppId::Settings,
 ];
 
-const GAME_CENTER_APPS: [AppId; 5] = [
+const GAME_CENTER_APPS: [AppId; 4] = [
     AppId::DungeonCore,
     AppId::AutoBattle,
     AppId::PseudoRacer,
     AppId::GraphicsLab,
-    AppId::TapRush,
 ];
 
 pub fn home_apps() -> &'static [AppId] {

@@ -18,7 +18,33 @@ impl MiniOs {
         touch: &TouchState,
         full_refresh: bool,
     ) {
-        match self.screen {
+        self.render_current_screen(display, board, touch, full_refresh, self.screen);
+
+        if let Some(scene) = self.current_showcase_scene() {
+            render_showcase_overlay(
+                display,
+                self.theme,
+                self.language.is_zh(),
+                scene.title(self.language.is_zh()),
+                scene.subtitle(self.language.is_zh()),
+                self.showcase_mode.map(|mode| mode.scene_index).unwrap_or(0),
+                SHOWCASE_SCENES.len(),
+                self.showcase_paused(),
+                self.showcase_countdown_sec(),
+                self.showcase_progress_pct(),
+            );
+        }
+    }
+
+    fn render_current_screen(
+        &mut self,
+        display: &mut Display,
+        board: &Board,
+        touch: &TouchState,
+        full_refresh: bool,
+        screen: Screen,
+    ) {
+        match screen {
             Screen::Home => render_home(
                 display,
                 self.home_index,
@@ -51,6 +77,20 @@ impl MiniOs {
                 self.settings_index,
                 self.settings_scroll_top_row,
             ),
+            Screen::PerformanceConsole => render_performance_console(
+                display,
+                self.theme,
+                self.language.is_zh(),
+                self.performance_focus_screen_label(),
+                self.performance_focus_title(),
+                self.performance_focus_subtitle(),
+                self.performance_recent_app_label(),
+                self.performance_render_pipeline(),
+                self.performance_render_cadence(),
+                self.fps_estimate,
+                self.render_strategy,
+            ),
+            Screen::Benchmark => self.render_benchmark(display, full_refresh),
             Screen::About => render_about(
                 display,
                 self.theme,
@@ -125,12 +165,22 @@ impl MiniOs {
                 .tap_rush
                 .render(display, self.theme, self.language.is_zh()),
             Screen::PseudoRacer => {
-                self.pseudo_racer
-                    .render(display, self.theme, self.language.is_zh())
+                if !full_refresh && self.pseudo_racer.can_partial_render() {
+                    self.pseudo_racer
+                        .render_partial(display, self.theme, self.language.is_zh());
+                } else {
+                    self.pseudo_racer
+                        .render(display, self.theme, self.language.is_zh());
+                }
             }
             Screen::GraphicsLab => {
-                self.graphics_lab
-                    .render(display, self.theme, self.language.is_zh())
+                if !full_refresh && self.graphics_lab.can_partial_render() {
+                    self.graphics_lab
+                        .render_partial(display, self.theme, self.language.is_zh());
+                } else {
+                    self.graphics_lab
+                        .render(display, self.theme, self.language.is_zh());
+                }
             }
         }
     }
@@ -151,6 +201,70 @@ impl MiniOs {
             self.sync_settings_scroll_to_selection();
         }
         self.force_full_redraw = true;
+    }
+
+    fn performance_focus_title(&self) -> &'static str {
+        if let Some(app_id) = self.performance_focus_app {
+            return app_registry::descriptor(app_id).title(self.language.is_zh());
+        }
+
+        if self.language.is_zh() {
+            "復古桌面"
+        } else {
+            "RETRO DESKTOP"
+        }
+    }
+
+    fn performance_focus_subtitle(&self) -> &'static str {
+        if let Some(app_id) = self.performance_focus_app {
+            return app_registry::descriptor(app_id).subtitle(self.language.is_zh());
+        }
+
+        if self.language.is_zh() {
+            "桌面 shell / icon launcher / taskbar"
+        } else {
+            "desktop shell / icon launcher / taskbar"
+        }
+    }
+
+    fn performance_recent_app_label(&self) -> &'static str {
+        self.performance_focus_app
+            .map(|app_id| app_registry::descriptor(app_id).title(false))
+            .unwrap_or("HOME")
+    }
+
+    fn performance_focus_screen_label(&self) -> &'static str {
+        if let Some(app_id) = self.performance_focus_app {
+            return app_registry::descriptor(app_id).title(false);
+        }
+        "HOME"
+    }
+
+    fn performance_render_pipeline(&self) -> &'static str {
+        match self.performance_focus_app {
+            Some(AppId::Album) => "RGB565 STILL / MOTION",
+            Some(AppId::GameCenter) => "RETRO LAUNCHER UI",
+            Some(AppId::Paint) => "PIXEL DIRTY RECT",
+            Some(AppId::Settings) => "CONTROL PANEL UI",
+            Some(AppId::DungeonCore) => "RAYCAST 3D + HUD",
+            Some(AppId::AutoBattle) => "DIRTY RECT ARENA",
+            Some(AppId::TapRush) => "REACTION PANEL",
+            Some(AppId::PseudoRacer) => "71x37 ROAD BUF x4",
+            Some(AppId::GraphicsLab) => "60x36 FB x5",
+            None => "DESKTOP + TASKBAR",
+        }
+    }
+
+    fn performance_render_cadence(&self) -> &'static str {
+        match self.performance_focus_app {
+            Some(AppId::DungeonCore) => "dynamic / strategy driven",
+            Some(AppId::AutoBattle) => "event + dirty redraw",
+            Some(AppId::PseudoRacer) => "20 FPS target",
+            Some(AppId::GraphicsLab) => "15 FPS target",
+            Some(AppId::Album) => "still / clip cadence",
+            Some(AppId::Paint) => "touch event redraw",
+            _ => "ui event redraw",
+        }
     }
 }
 

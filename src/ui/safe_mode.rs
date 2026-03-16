@@ -3,6 +3,7 @@ use crate::system_info;
 
 use super::{
     draw_footer_hint, draw_gradient_background, draw_info_strip, draw_shell_window, draw_title_bar,
+    fit_text_to_width,
 };
 
 pub fn render_safe_mode(
@@ -50,17 +51,10 @@ pub fn render_safe_mode(
 
     display.panel(18, 62, 284, 38, ui.panel_alt, ui.orange);
     draw_safe_mode_badge(display, 248, 70, &ui);
-    display.text(
-        28,
-        72,
-        system_info::safe_mode_hint(zh_mode),
-        ui.text,
-        ui.panel_alt,
-        1,
-    );
-    display.text(
-        28,
-        86,
+    let hint_line = fit_text_to_width(display, system_info::safe_mode_hint(zh_mode), 198, 1);
+    display.text(28, 72, &hint_line, ui.text, ui.panel_alt, 1);
+    let detail_line = fit_text_to_width(
+        display,
         if touch_ready {
             if zh_mode {
                 "目前已有觸控校正，可直接進桌面"
@@ -72,10 +66,10 @@ pub fn render_safe_mode(
         } else {
             "PERSISTED CALIBRATION WAS BYPASSED, USE CAL OR DIAGNOSTICS"
         },
-        ui.text_muted,
-        ui.panel_alt,
+        198,
         1,
     );
+    display.text(28, 86, &detail_line, ui.text_muted, ui.panel_alt, 1);
 
     let rows = [
         (
@@ -128,8 +122,10 @@ pub fn render_safe_mode(
         display.fill_rect(28, y + 7, 12, 12, color::mix(fill, *accent, 24));
         display.stroke_rect(28, y + 7, 12, 12, 1, *accent);
         display.fill_rect(32, y + 11, 4, 4, *accent);
-        display.text(46, y + 7, title, ui.text, fill, 1);
-        display.text(46, y + 17, subtitle, ui.text_muted, fill, 1);
+        let title = fit_text_to_width(display, title, 190, 1);
+        let subtitle = fit_text_to_width(display, subtitle, 190, 1);
+        display.text(46, y + 7, &title, ui.text, fill, 1);
+        display.text(46, y + 17, &subtitle, ui.text_muted, fill, 1);
         if selected {
             display.text(274, y + 10, ">", *accent, fill, 1);
         }

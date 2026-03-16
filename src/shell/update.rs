@@ -18,6 +18,10 @@ impl MiniOs {
         touch_driver: &mut Touch,
         dt_ms: u32,
     ) -> bool {
+        if self.showcase_active() {
+            return self.update_showcase_mode(input, touch, dt_ms);
+        }
+
         let mut dirty = false;
         match self.screen {
             Screen::Home => {
@@ -181,6 +185,42 @@ impl MiniOs {
                         }
                     }
                 }
+            }
+            Screen::PerformanceConsole => {
+                if input.home_chord() {
+                    self.switch_screen(Screen::Settings);
+                    return true;
+                }
+                if input.k1_just_pressed {
+                    self.enter_benchmark_mode();
+                    return true;
+                }
+                let uptime_second = millis() / 1000;
+                if uptime_second != self.last_uptime_second {
+                    self.last_uptime_second = uptime_second;
+                    dirty = true;
+                }
+                if touch.just_released
+                    && touch_started_in_rect(
+                        touch,
+                        PERF_BENCH_X,
+                        PERF_BENCH_Y,
+                        PERF_BENCH_W,
+                        PERF_BENCH_H,
+                    )
+                {
+                    self.enter_benchmark_mode();
+                    return true;
+                }
+                if touch.just_released
+                    && touch_started_in_rect(touch, NAV_BACK_X, NAV_BACK_Y, NAV_BACK_W, NAV_BACK_H)
+                {
+                    self.switch_screen(Screen::Settings);
+                    return true;
+                }
+            }
+            Screen::Benchmark => {
+                return self.update_benchmark(input, touch, dt_ms);
             }
             Screen::About => {
                 if input.home_chord() {
@@ -409,7 +449,12 @@ impl MiniOs {
                 if self.pseudo_racer.take_persist_request() {
                     self.save_storage();
                 }
-                dirty = self.pseudo_racer.needs_animation()
+                if self.pseudo_racer.take_full_redraw_request() {
+                    self.force_full_redraw = true;
+                    dirty = true;
+                }
+                dirty = self.pseudo_racer.take_render_request()
+                    || dirty
                     || input.k0_just_pressed
                     || input.k1_just_pressed
                     || input.wkup_just_pressed
@@ -423,7 +468,12 @@ impl MiniOs {
                     }
                     GraphicsLabAction::Stay => {}
                 }
-                dirty = self.graphics_lab.needs_animation()
+                if self.graphics_lab.take_full_redraw_request() {
+                    self.force_full_redraw = true;
+                    dirty = true;
+                }
+                dirty = self.graphics_lab.take_render_request()
+                    || dirty
                     || input.k0_just_pressed
                     || input.k1_just_pressed
                     || input.wkup_just_pressed
@@ -457,6 +507,18 @@ impl MiniOs {
         self.recent_app = Some(app_id);
         self.home_index = app_registry::home_slot_for_app(app_id);
         self.game_center.select_app(app_id);
+        if matches!(
+            app_id,
+            AppId::Album
+                | AppId::Paint
+                | AppId::DungeonCore
+                | AppId::AutoBattle
+                | AppId::TapRush
+                | AppId::PseudoRacer
+                | AppId::GraphicsLab
+        ) {
+            self.performance_focus_app = Some(app_id);
+        }
         let _ = self.save_storage();
         match app_id {
             AppId::Album => self.switch_screen(Screen::Album),
@@ -482,6 +544,7 @@ impl MiniOs {
 
     fn launch_map(&mut self) {
         self.dungeon.set_map(self.map_index);
+        self.performance_focus_app = Some(AppId::DungeonCore);
         self.switch_screen(Screen::DungeonCore);
     }
 
@@ -510,6 +573,15 @@ impl MiniOs {
                 true
             }
             5 => {
+                self.enter_showcase_mode();
+                true
+            }
+            6 => {
+                self.last_uptime_second = millis() / 1000;
+                self.switch_screen(Screen::PerformanceConsole);
+                true
+            }
+            7 => {
                 self.diagnostics_return_screen = Screen::Settings;
                 self.switch_screen(Screen::Diagnostics);
                 true
@@ -590,7 +662,13 @@ impl MiniOs {
     }
 }
 
-fn touch_started_in_rect(touch: &TouchState, x: u16, y: u16, width: u16, height: u16) -> bool {
+pub(super) fn touch_started_in_rect(
+    touch: &TouchState,
+    x: u16,
+    y: u16,
+    width: u16,
+    height: u16,
+) -> bool {
     if touch.dragging {
         return point_in_rect_with_slop(touch.start_x, touch.start_y, x, y, width, height)
             && point_in_rect_with_slop(touch.release_x, touch.release_y, x, y, width, height);

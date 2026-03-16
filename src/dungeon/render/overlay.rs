@@ -8,20 +8,52 @@ pub(super) fn draw_overlay(
     retry_label: &str,
     map_label: &str,
     accent: u16,
+    map_name: &str,
+    score: u32,
+    kills: u16,
+    zh_mode: bool,
 ) {
     let glow = crate::display::color::mix(accent, ui.white, 84);
-    const PANEL_Y: u16 = 80;
+    const PANEL_Y: u16 = 72;
     display.fill_rect(
         44,
         PANEL_Y + 8,
         232,
-        88,
+        104,
         crate::display::color::mix(ui.shadow, accent, 26),
     );
-    display.panel(52, PANEL_Y, 216, 88, ui.panel_alt, accent);
-    display.stroke_rect(56, PANEL_Y + 4, 208, 80, 1, glow);
+    display.panel(52, PANEL_Y, 216, 104, ui.panel_alt, accent);
+    display.stroke_rect(56, PANEL_Y + 4, 208, 96, 1, glow);
     display.centered_text(160, PANEL_Y + 14, title, ui.text, ui.panel_alt, 2);
     display.centered_text(160, PANEL_Y + 38, subtitle, ui.text_muted, ui.panel_alt, 1);
+    display.fill_rect(
+        70,
+        PANEL_Y + 48,
+        180,
+        10,
+        crate::display::color::mix(ui.panel, accent, 12),
+    );
+    display.stroke_rect(70, PANEL_Y + 48, 180, 10, 1, ui.steel);
+    display.text(
+        76,
+        PANEL_Y + 50,
+        map_name,
+        ui.white,
+        crate::display::color::mix(ui.panel, accent, 12),
+        1,
+    );
+    let mut stat_line = heapless::String::<32>::new();
+    let _ = core::fmt::Write::write_fmt(
+        &mut stat_line,
+        format_args!(
+            "{} {} / {} {}",
+            if zh_mode { "分數" } else { "SCORE" },
+            score,
+            if zh_mode { "擊殺" } else { "KILLS" },
+            kills
+        ),
+    );
+    display.centered_text(160, PANEL_Y + 66, &stat_line, ui.text, ui.panel_alt, 1);
 
     display.panel(
         OVERLAY_RETRY_X,
@@ -62,6 +94,8 @@ pub(super) fn draw_intro_overlay(
     ui: &crate::display::Palette,
     map: &MapDef,
     zh_mode: bool,
+    enemy_count: u8,
+    pickup_count: u8,
 ) {
     let accent = match map.spawn_angle > 0.0 {
         true => ui.cyan,
@@ -70,12 +104,12 @@ pub(super) fn draw_intro_overlay(
     let band = crate::display::color::mix(ui.panel_alt, accent, 78);
     display.fill_rect(
         34,
-        66,
+        58,
         252,
-        80,
+        100,
         crate::display::color::mix(ui.shadow, accent, 28),
     );
-    display.panel(42, 58, 236, 74, ui.panel_alt, accent);
+    display.panel(42, 50, 236, 94, ui.panel_alt, accent);
     display.fill_rect(54, 96, 212, 8, band);
     display.centered_text(
         160,
@@ -100,6 +134,30 @@ pub(super) fn draw_intro_overlay(
     display.centered_text(
         160,
         120,
+        if zh_mode {
+            "清空敵軍並善用補給"
+        } else {
+            "CLEAR HOSTILES AND USE MED KITS"
+        },
+        ui.text,
+        ui.panel_alt,
+        1,
+    );
+    let mut stat_line = heapless::String::<32>::new();
+    let _ = core::fmt::Write::write_fmt(
+        &mut stat_line,
+        format_args!(
+            "{} {} / {} {}",
+            if zh_mode { "敵人" } else { "ENEMY" },
+            enemy_count,
+            if zh_mode { "補包" } else { "MED" },
+            pickup_count
+        ),
+    );
+    display.centered_text(160, 130, &stat_line, ui.text_muted, ui.panel_alt, 1);
+    display.centered_text(
+        160,
+        140,
         if zh_mode {
             "點擊或按 K1 可略過"
         } else {

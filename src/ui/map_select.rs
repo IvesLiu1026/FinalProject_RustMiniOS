@@ -3,7 +3,7 @@ use crate::dungeon::DungeonApp;
 
 use super::{
     draw_footer_hint, draw_gradient_background, draw_info_strip, draw_shell_window, draw_title_bar,
-    render_nav_back,
+    fit_text_to_width, render_nav_back,
 };
 
 pub fn render_map_select(display: &mut Display, map_index: usize, theme: ThemeMode, zh_mode: bool) {
@@ -77,7 +77,7 @@ pub fn render_map_select(display: &mut Display, map_index: usize, theme: ThemeMo
     display.text(
         28,
         156,
-        DungeonApp::map_name(map_index, zh_mode),
+        &fit_text_to_width(display, DungeonApp::map_name(map_index, zh_mode), 72, 1),
         ui.text_muted,
         ui.panel,
         1,
@@ -103,17 +103,10 @@ pub fn render_map_select(display: &mut Display, map_index: usize, theme: ThemeMo
         display.stroke_rect(136, y + 8, 16, 16, 1, accent);
         display.fill_rect(140, y + 12, 8, 8, ui.text);
         display.fill_rect(142, y + 14, 4, 4, color::mix(ui.panel_alt, ui.amber, 22));
-        display.text(
-            160,
-            y + 10,
-            DungeonApp::map_name(idx, zh_mode),
-            ui.text,
-            fill,
-            1,
-        );
-        display.text(
-            248,
-            y + 12,
+        let map_name = fit_text_to_width(display, DungeonApp::map_name(idx, zh_mode), 78, 1);
+        display.text(160, y + 10, &map_name, ui.text, fill, 1);
+        let state_text = fit_text_to_width(
+            display,
             if selected {
                 if zh_mode {
                     "進入"
@@ -125,10 +118,10 @@ pub fn render_map_select(display: &mut Display, map_index: usize, theme: ThemeMo
             } else {
                 "SELECT"
             },
-            ui.text_muted,
-            fill,
+            36,
             1,
         );
+        display.text(248, y + 12, &state_text, ui.text_muted, fill, 1);
     }
 
     draw_footer_hint(

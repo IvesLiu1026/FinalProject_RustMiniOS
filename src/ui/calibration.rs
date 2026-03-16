@@ -6,7 +6,7 @@ use crate::display::{color, palette, Display, ThemeMode};
 
 use super::{
     draw_footer_hint, draw_gradient_background, draw_info_strip, draw_shell_window, draw_title_bar,
-    render_nav_back,
+    fit_text_to_width, render_nav_back,
 };
 
 pub fn render_touch_calibration(display: &mut Display, step: u8, theme: ThemeMode, zh_mode: bool) {
@@ -64,30 +64,28 @@ pub fn render_touch_calibration(display: &mut Display, step: u8, theme: ThemeMod
 
     display.panel(18, 62, 284, 38, ui.panel_alt, ui.cyan);
     draw_wizard_chip(display, 250, 70, &ui);
-    display.text(
-        28,
-        72,
+    let intro_title = fit_text_to_width(
+        display,
         if zh_mode {
-            "依序點擊四角與中央"
+            "請依序點擊五個準星"
         } else {
-            "TAP EACH CROSS INCLUDING CENTER"
+            "TAP THE FIVE TARGETS IN ORDER"
         },
-        ui.text,
-        ui.panel_alt,
-        2,
-    );
-    display.text(
-        28,
-        86,
-        if zh_mode {
-            "完成後會保存，之後開機可直接進桌面"
-        } else {
-            "SAVED AFTER FINISH, FUTURE BOOTS CAN GO STRAIGHT TO DESKTOP"
-        },
-        ui.text_muted,
-        ui.panel_alt,
+        200,
         1,
     );
+    let intro_body = fit_text_to_width(
+        display,
+        if zh_mode {
+            "完成後會保存，下次開機可直接進桌面"
+        } else {
+            "CALIBRATION SAVES AFTER FINISH"
+        },
+        210,
+        1,
+    );
+    display.text(28, 72, &intro_title, ui.text, ui.panel_alt, 1);
+    display.text(28, 84, &intro_body, ui.text_muted, ui.panel_alt, 1);
 
     let safe_step = (step.min(4)) as usize;
     let mut line: String<24> = String::new();
@@ -160,9 +158,9 @@ pub fn render_touch_calibration(display: &mut Display, step: u8, theme: ThemeMod
     draw_footer_hint(
         display,
         if zh_mode {
-            "TAP TARGET TO CAPTURE  K0 RETURNS WHEN CALIBRATION EXISTS"
+            "點準星完成校正  若已有資料可按 K0 返回"
         } else {
-            "TAP TARGET TO CAPTURE  K0 RETURNS WHEN CALIBRATION EXISTS"
+            "TAP TARGET  K0 RETURNS IF CALIBRATION EXISTS"
         },
         ui.white,
         &ui,

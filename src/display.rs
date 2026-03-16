@@ -1,3 +1,5 @@
+use core::ffi::{c_char, CStr};
+
 use crate::{font, font_zh};
 
 pub const SCREEN_WIDTH: u16 = 320;
@@ -123,6 +125,8 @@ unsafe extern "C" {
     fn LCD_SetTextColor(color: u16);
     fn LCD_FillRect(x: u16, y: u16, width: u16, height: u16);
     fn LCD_DrawRGBbuffer(image: *const ImageBuf);
+    fn LCD_DrawJPG(x: u16, y: u16, jpg_ptr: *mut u8, width: u16, height: u16) -> u8;
+    fn get_JPG_error_code() -> *const c_char;
 }
 
 pub struct Display;
@@ -204,31 +208,69 @@ impl Display {
             return;
         }
 
+        const MAX_SCALE_BATCH: usize = 8;
+        const SOURCE_ROWS_PER_BLOCK: usize = 4;
         let mut row_buffer = [0u16; SCREEN_WIDTH as usize];
+        let mut block_buffer =
+            [0u16; SCREEN_WIDTH as usize * MAX_SCALE_BATCH * SOURCE_ROWS_PER_BLOCK];
         let row_width = scaled_width as usize;
         let src_width = width as usize;
+        let scale_usize = scale as usize;
 
-        for src_y in 0..height as usize {
-            let src_row = src_y * src_width;
-            let mut out_x = 0usize;
-            for src_x in 0..src_width {
-                let pixel = data[src_row + src_x];
-                for _ in 0..scale {
-                    row_buffer[out_x] = pixel;
-                    out_x += 1;
+        if scale_usize > MAX_SCALE_BATCH {
+            for src_y in 0..height as usize {
+                let src_row = src_y * src_width;
+                let mut out_x = 0usize;
+                for src_x in 0..src_width {
+                    let pixel = data[src_row + src_x];
+                    for _ in 0..scale {
+                        row_buffer[out_x] = pixel;
+                        out_x += 1;
+                    }
+                }
+
+                let dest_y = y.saturating_add(src_y as u16 * scale);
+                for repeat in 0..scale {
+                    self.draw_rgb565(
+                        x,
+                        dest_y.saturating_add(repeat),
+                        scaled_width,
+                        1,
+                        &row_buffer[..row_width],
+                    );
+                }
+            }
+            return;
+        }
+
+        let mut src_y = 0usize;
+        while src_y < height as usize {
+            let rows_in_block = (height as usize - src_y).min(SOURCE_ROWS_PER_BLOCK);
+            for row_offset in 0..rows_in_block {
+                let src_row = (src_y + row_offset) * src_width;
+                let mut out_x = 0usize;
+                for src_x in 0..src_width {
+                    let pixel = data[src_row + src_x];
+                    for _ in 0..scale {
+                        row_buffer[out_x] = pixel;
+                        out_x += 1;
+                    }
+                }
+                for repeat in 0..scale_usize {
+                    let dst = (row_offset * scale_usize + repeat) * row_width;
+                    block_buffer[dst..dst + row_width].copy_from_slice(&row_buffer[..row_width]);
                 }
             }
 
             let dest_y = y.saturating_add(src_y as u16 * scale);
-            for repeat in 0..scale {
-                self.draw_rgb565(
-                    x,
-                    dest_y.saturating_add(repeat),
-                    scaled_width,
-                    1,
-                    &row_buffer[..row_width],
-                );
-            }
+            self.draw_rgb565(
+                x,
+                dest_y,
+                scaled_width,
+                (rows_in_block * scale_usize) as u16,
+                &block_buffer[..row_width * rows_in_block * scale_usize],
+            );
+            src_y += rows_in_block;
         }
     }
 
@@ -255,32 +297,90 @@ impl Display {
             return;
         }
 
+        const MAX_SCALE_BATCH: usize = 8;
+        const SOURCE_ROWS_PER_BLOCK: usize = 4;
         let mut row_buffer = [0u16; SCREEN_WIDTH as usize];
+        let mut block_buffer =
+            [0u16; SCREEN_WIDTH as usize * MAX_SCALE_BATCH * SOURCE_ROWS_PER_BLOCK];
         let row_width = scaled_width as usize;
         let src_width = width as usize;
+        let scale_usize = scale as usize;
 
-        for src_y in 0..height as usize {
-            let src_row = src_y * src_width * 2;
-            let mut out_x = 0usize;
-            for src_x in 0..src_width {
-                let byte = src_row + src_x * 2;
-                let pixel = u16::from_le_bytes([data[byte], data[byte + 1]]);
-                for _ in 0..scale {
-                    row_buffer[out_x] = pixel;
-                    out_x += 1;
+        if scale_usize > MAX_SCALE_BATCH {
+            for src_y in 0..height as usize {
+                let src_row = src_y * src_width * 2;
+                let mut out_x = 0usize;
+                for src_x in 0..src_width {
+                    let byte = src_row + src_x * 2;
+                    let pixel = u16::from_le_bytes([data[byte], data[byte + 1]]);
+                    for _ in 0..scale {
+                        row_buffer[out_x] = pixel;
+                        out_x += 1;
+                    }
+                }
+
+                let dest_y = y.saturating_add(src_y as u16 * scale);
+                for repeat in 0..scale {
+                    self.draw_rgb565(
+                        x,
+                        dest_y.saturating_add(repeat),
+                        scaled_width,
+                        1,
+                        &row_buffer[..row_width],
+                    );
+                }
+            }
+            return;
+        }
+
+        let mut src_y = 0usize;
+        while src_y < height as usize {
+            let rows_in_block = (height as usize - src_y).min(SOURCE_ROWS_PER_BLOCK);
+            for row_offset in 0..rows_in_block {
+                let src_row = (src_y + row_offset) * src_width * 2;
+                let mut out_x = 0usize;
+                for src_x in 0..src_width {
+                    let byte = src_row + src_x * 2;
+                    let pixel = u16::from_le_bytes([data[byte], data[byte + 1]]);
+                    for _ in 0..scale {
+                        row_buffer[out_x] = pixel;
+                        out_x += 1;
+                    }
+                }
+
+                for repeat in 0..scale_usize {
+                    let dst = (row_offset * scale_usize + repeat) * row_width;
+                    block_buffer[dst..dst + row_width].copy_from_slice(&row_buffer[..row_width]);
                 }
             }
 
             let dest_y = y.saturating_add(src_y as u16 * scale);
-            for repeat in 0..scale {
-                self.draw_rgb565(
-                    x,
-                    dest_y.saturating_add(repeat),
-                    scaled_width,
-                    1,
-                    &row_buffer[..row_width],
-                );
+            self.draw_rgb565(
+                x,
+                dest_y,
+                scaled_width,
+                (rows_in_block * scale_usize) as u16,
+                &block_buffer[..row_width * rows_in_block * scale_usize],
+            );
+            src_y += rows_in_block;
+        }
+    }
+
+    pub fn draw_jpeg(&mut self, x: u16, y: u16, width: u16, height: u16, data: &[u8]) -> u8 {
+        if width == 0 || height == 0 || data.is_empty() {
+            return 5;
+        }
+
+        unsafe { LCD_DrawJPG(x, y, data.as_ptr().cast_mut(), width, height) }
+    }
+
+    pub fn jpeg_error_text(&self) -> Option<&'static str> {
+        unsafe {
+            let ptr = get_JPG_error_code();
+            if ptr.is_null() {
+                return None;
             }
+            CStr::from_ptr(ptr).to_str().ok()
         }
     }
 
