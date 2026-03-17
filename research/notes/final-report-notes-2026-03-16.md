@@ -181,7 +181,7 @@
 
 板上驗證流程整理在：
 
-- [docs/smoke-test-checklist.md](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/docs/smoke-test-checklist.md)
+- [research/notes/smoke-test-checklist.md](/Users/ivesliu/Documents/MCU2026/FinalProject_RustMiniOS/research/notes/smoke-test-checklist.md)
 
 包含：
 

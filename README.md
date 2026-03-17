@@ -42,8 +42,8 @@ The repo is meant to show that a single STM32 board can run a polished, real-tim
 - `tools/`: preprocessing, flashing, bundle, and toolchain helper scripts
 - `host_checks/`: host-side tests for storage, registry, and media invariants
 - `mac_companion/`: optional desktop serial host for Album media streaming
-- `docs/`: public-facing setup and validation notes
-- `research/`: internal notes, design specs, demo materials, and preview prototypes that are not required to build the firmware
+- `docs/`: public-facing setup notes that external users may need
+- `research/`: internal notes, architecture writeups, validation checklists, demo materials, and preview prototypes that are not required to build the firmware
 
 ## Build
 
@@ -117,9 +117,7 @@ Run the host-side checks with:
 
 Useful runtime notes:
 
-- [docs/smoke-test-checklist.md](docs/smoke-test-checklist.md)
 - [docs/mac-companion.md](docs/mac-companion.md)
-- [docs/repo-architecture.md](docs/repo-architecture.md)
 
 Internal design and presentation materials are kept under [research/](research/README.md).
 
