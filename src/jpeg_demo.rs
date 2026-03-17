@@ -3,17 +3,19 @@ pub struct EmbeddedJpegDemo {
     pub data: &'static [u8],
 }
 
-const CHERRY_JPEG: &[u8] = include_bytes!("../assets/test_media/images/cherry.jpeg");
-const RUUU_JPEG: &[u8] = include_bytes!("../assets/test_media/images/ruuu.jpeg");
+const DUNGEON_PREVIEW_JPEG: &[u8] =
+    include_bytes!("../assets/test_media/images/dungeon_preview.jpeg");
+const CREATURES_PREVIEW_JPEG: &[u8] =
+    include_bytes!("../assets/test_media/images/creatures_preview.jpeg");
 
 pub static JPEG_DEMOS: [EmbeddedJpegDemo; 2] = [
     EmbeddedJpegDemo {
-        label: "Cherry",
-        data: CHERRY_JPEG,
+        label: "Dungeon",
+        data: DUNGEON_PREVIEW_JPEG,
     },
     EmbeddedJpegDemo {
-        label: "Ruuu",
-        data: RUUU_JPEG,
+        label: "Creatures",
+        data: CREATURES_PREVIEW_JPEG,
     },
 ];
 

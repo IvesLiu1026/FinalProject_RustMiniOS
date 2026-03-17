@@ -2,14 +2,24 @@
 
 Place temporary media here for Codex-side conversion and playback testing.
 
+Only commit redistributable, game-themed sample media that is required by the
+public repo. Personal photos, third-party reaction GIFs, and other private test
+material should stay local and remain untracked.
+
 Folders:
 
 - `images/`
   - Drop still images here, such as `.png`, `.jpg`, `.jpeg`, or `.bmp`.
+  - The repo only keeps the small JPEG samples required by `src/jpeg_demo.rs`.
 - `gifs/`
-  - Drop short animated GIF files here for frame extraction tests.
+  - Drop short animated GIF files here for local frame extraction tests.
+  - Source GIF files are intentionally gitignored and should not be committed.
 - `converted/`
   - Generated outputs from `tools/process_test_media.sh`.
+  - Public history should keep only `converted/manifests` and
+    `converted/firmware`.
+  - Preview PNGs, extracted GIF frames, and preview GIFs are local scratch
+    outputs and are gitignored.
 
 Recommended file constraints for early tests:
 

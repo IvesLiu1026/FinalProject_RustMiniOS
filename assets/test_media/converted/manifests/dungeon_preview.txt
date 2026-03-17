@@ -1,0 +1,10 @@
+type=still
+source=dungeon_preview.jpeg
+canvas=320x240
+foreground_max=296x216
+strategy=contain_with_blurred_backdrop
+preview=dungeon_preview_320x240.png
+firmware_format=rgb565le
+firmware_size=120x90
+firmware_scale=2
+firmware_file=dungeon_preview.rgb565

@@ -1,0 +1,13 @@
+type=gif
+source=creatures_pan.gif
+canvas=320x240
+foreground_max=296x216
+strategy=contain_with_blurred_backdrop
+frame_step=2
+frame_delay_cs=10
+preview=creatures_pan_320x240.gif
+frames_kept=6
+firmware_format=rgb565le
+firmware_size=80x60
+firmware_scale=3
+firmware_frame_dir=creatures_pan

@@ -6,4 +6,9 @@
 .vscode
 assets/raw
 assets/source_packs
+assets/test_media/gifs/*
+!assets/test_media/gifs/.gitkeep
+assets/test_media/converted/gif_previews/
+assets/test_media/converted/gif_frames/
+assets/test_media/converted/previews/
 .env

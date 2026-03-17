@@ -94,6 +94,11 @@ Run:
 ./tools/process_test_media.sh
 ```
 
+The public repo only tracks redistributable sample stills plus the generated
+firmware/manifests needed for builds. Source GIFs and local preview outputs stay
+gitignored so personal or non-redistributable media does not get published by
+accident.
+
 The default firmware build embeds Album stills and motion clips. To build the lighter companion mode instead:
 
 ```bash
