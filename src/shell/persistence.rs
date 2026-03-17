@@ -1,5 +1,7 @@
 use super::*;
 
+const STORAGE_COMMIT_DELAY_MS: u32 = 1_500;
+
 impl MiniOs {
     pub fn apply_persisted_state(&mut self, state: PersistedState, _touch: &mut Touch) {
         let settings = state.system;
@@ -27,11 +29,37 @@ impl MiniOs {
         self.calibration_step = 0;
         self.calibration_raw_x = [0; 5];
         self.calibration_raw_y = [0; 5];
+        self.storage_dirty = false;
+        self.storage_dirty_since_ms = 0;
+        self.storage_flush_requested = false;
         self.force_full_redraw = true;
     }
 
-    pub(super) fn save_storage(&self) -> bool {
-        storage::save(&self.build_persisted_state())
+    pub fn service_background_tasks(&mut self, input: &ButtonSnapshot, touch: &TouchState) {
+        self.service_storage_commit(input, touch);
+    }
+
+    pub(super) fn request_storage_save(&mut self) {
+        self.storage_dirty = true;
+        self.storage_dirty_since_ms = millis();
+    }
+
+    pub(super) fn request_storage_flush(&mut self) {
+        self.request_storage_save();
+        self.storage_flush_requested = true;
+    }
+
+    pub(super) fn flush_storage(&mut self) -> bool {
+        let saved = storage::save(&self.build_persisted_state());
+        if saved {
+            self.storage_dirty = false;
+            self.storage_flush_requested = false;
+        } else {
+            self.storage_dirty = true;
+            self.storage_dirty_since_ms = millis();
+            self.storage_flush_requested = false;
+        }
+        saved
     }
 
     fn build_persisted_state(&self) -> PersistedState {
@@ -77,7 +105,7 @@ impl MiniOs {
         self.album_redraw = None;
         self.paint_redraw = None;
         self.auto_battle_redraw = None;
-        self.save_storage()
+        self.flush_storage()
     }
 
     pub(super) fn perform_factory_reset(&mut self, touch_driver: &mut Touch) -> bool {
@@ -87,6 +115,26 @@ impl MiniOs {
         touch_driver.set_calibration(TouchCalibration::default());
         *self = MiniOs::new();
         true
+    }
+
+    fn service_storage_commit(&mut self, input: &ButtonSnapshot, touch: &TouchState) {
+        if !self.storage_dirty {
+            return;
+        }
+
+        if input.k0 || input.k1 || input.wkup || touch.active || touch.just_pressed || touch.just_released
+        {
+            return;
+        }
+
+        let now = millis();
+        if !self.storage_flush_requested
+            && now.wrapping_sub(self.storage_dirty_since_ms) < STORAGE_COMMIT_DELAY_MS
+        {
+            return;
+        }
+
+        let _ = self.flush_storage();
     }
 }
 

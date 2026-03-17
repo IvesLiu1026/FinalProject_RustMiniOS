@@ -75,27 +75,23 @@ impl MiniOs {
             ShowcaseScene::Album => {
                 self.album.prepare_showcase();
                 self.album_redraw = Some(AlbumRedraw::Full);
-                self.performance_focus_app = Some(AppId::Album);
-                self.switch_screen(Screen::Album);
+                self.show_app_screen(AppId::Album);
             }
             ShowcaseScene::AutoBattle => {
                 let stage_index = (mode.cycle_count as usize) % STATION_HUNTER_STAGE_COUNT;
                 self.auto_battle.start_showcase(stage_index);
                 self.auto_battle_redraw = Some(AutoBattleRedraw::Full);
-                self.performance_focus_app = Some(AppId::AutoBattle);
-                self.switch_screen(Screen::AutoBattle);
+                self.show_app_screen(AppId::AutoBattle);
             }
             ShowcaseScene::PseudoRacer => {
                 let track_index = (mode.cycle_count as usize) % 3;
                 self.pseudo_racer.start_showcase(track_index);
-                self.performance_focus_app = Some(AppId::PseudoRacer);
-                self.switch_screen(Screen::PseudoRacer);
+                self.show_app_screen(AppId::PseudoRacer);
             }
             ShowcaseScene::GraphicsLab => {
                 let mode_index = (mode.cycle_count as usize) % 6;
                 self.graphics_lab.start_showcase(mode_index);
-                self.performance_focus_app = Some(AppId::GraphicsLab);
-                self.switch_screen(Screen::GraphicsLab);
+                self.show_app_screen(AppId::GraphicsLab);
             }
             ShowcaseScene::Diagnostics => {
                 self.diagnostics_return_screen = Screen::Settings;
@@ -163,7 +159,7 @@ impl MiniOs {
                     .auto_battle
                     .update(&neutral_input, &neutral_touch, dt_ms);
                 if self.auto_battle.take_persist_request() {
-                    self.save_storage();
+                    self.request_storage_save();
                 }
                 self.auto_battle_redraw = self.auto_battle.take_redraw_request();
                 dirty = self.auto_battle_redraw.is_some();
@@ -173,7 +169,7 @@ impl MiniOs {
                     .pseudo_racer
                     .update(&neutral_input, &neutral_touch, dt_ms);
                 if self.pseudo_racer.take_persist_request() {
-                    self.save_storage();
+                    self.request_storage_save();
                 }
                 dirty = self.pseudo_racer.needs_animation();
             }

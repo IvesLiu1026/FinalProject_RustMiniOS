@@ -22,6 +22,10 @@ impl MiniOs {
             return self.update_showcase_mode(input, touch, dt_ms);
         }
 
+        if let Some(dirty) = self.update_hosted_app(input, touch, dt_ms) {
+            return dirty;
+        }
+
         let mut dirty = false;
         match self.screen {
             Screen::Home => {
@@ -52,73 +56,6 @@ impl MiniOs {
                             dirty = true;
                             break;
                         }
-                    }
-                }
-            }
-            Screen::Album => {
-                match self.album.update(input, touch, dt_ms) {
-                    AlbumAction::ExitHome => {
-                        self.save_storage();
-                        self.switch_screen(Screen::Home);
-                        return true;
-                    }
-                    AlbumAction::Stay => {}
-                }
-                self.album_redraw = self.album.take_redraw_request();
-                dirty = self.album_redraw.is_some();
-            }
-            Screen::GameCenter => {
-                match self.game_center.update(input, touch) {
-                    GameCenterAction::Launch(app_id) => {
-                        self.launch_app(app_id);
-                        return true;
-                    }
-                    GameCenterAction::ExitHome => {
-                        self.switch_screen(Screen::Home);
-                        return true;
-                    }
-                    GameCenterAction::Stay => {}
-                }
-                dirty = input.k0_just_pressed || input.wkup_just_pressed || touch.just_released;
-            }
-            Screen::MapSelect => {
-                if input.k0_just_pressed {
-                    self.map_index = self.map_index.wrapping_add(DungeonApp::map_count() - 1)
-                        % DungeonApp::map_count();
-                    dirty = true;
-                }
-                if input.wkup_just_pressed {
-                    self.map_index = (self.map_index + 1) % DungeonApp::map_count();
-                    dirty = true;
-                }
-                if input.k1_just_pressed {
-                    self.launch_map();
-                    return true;
-                }
-                if input.home_chord() {
-                    self.switch_screen(Screen::GameCenter);
-                    return true;
-                }
-                if touch.just_released {
-                    if touch_started_in_rect(touch, NAV_BACK_X, NAV_BACK_Y, NAV_BACK_W, NAV_BACK_H)
-                    {
-                        self.switch_screen(Screen::GameCenter);
-                        return true;
-                    }
-                    for index in 0..DungeonApp::map_count() {
-                        let y = 72 + index as u16 * 44;
-                        if touch_started_in_rect(touch, 20, y, 280, 36) {
-                            if self.map_index == index {
-                                self.launch_map();
-                            } else {
-                                self.map_index = index;
-                            }
-                            return true;
-                        }
-                    }
-                    if touch_started_in_rect(touch, 22, 208, 276, 20) {
-                        self.switch_screen(Screen::GameCenter);
-                        return true;
                     }
                 }
             }
@@ -378,107 +315,15 @@ impl MiniOs {
                     dirty = true;
                 }
             }
-            Screen::DungeonCore => {
-                match self.dungeon.update(input, touch, dt_ms) {
-                    DungeonAction::ExitHome => {
-                        self.switch_screen(Screen::GameCenter);
-                        return true;
-                    }
-                    DungeonAction::OpenMapSelect => {
-                        self.switch_screen(Screen::MapSelect);
-                        return true;
-                    }
-                    DungeonAction::Stay => {}
-                }
-                dirty = self.dungeon.needs_animation()
-                    || self.dungeon.take_redraw_request()
-                    || input.k0_just_pressed
-                    || input.k1_just_pressed
-                    || input.wkup_just_pressed
-                    || input.home_chord()
-                    || touch.just_pressed
-                    || touch.just_released;
-            }
-            Screen::Paint => {
-                match self.paint.update(input, touch) {
-                    PaintAction::ExitHome => {
-                        self.save_storage();
-                        self.switch_screen(Screen::Home);
-                        return true;
-                    }
-                    PaintAction::Stay => {}
-                }
-                self.paint_redraw = self.paint.take_redraw_request();
-                dirty = self.paint_redraw.is_some();
-            }
-            Screen::AutoBattle => {
-                match self.auto_battle.update(input, touch, dt_ms) {
-                    AutoBattleAction::ExitGameCenter => {
-                        self.save_storage();
-                        self.switch_screen(Screen::GameCenter);
-                        return true;
-                    }
-                    AutoBattleAction::Stay => {}
-                }
-                if self.auto_battle.take_persist_request() {
-                    self.save_storage();
-                }
-                self.auto_battle_redraw = self.auto_battle.take_redraw_request();
-                dirty = self.auto_battle_redraw.is_some();
-            }
-            Screen::TapRush => {
-                match self.tap_rush.update(input, touch, dt_ms) {
-                    TapRushAction::ExitGameCenter => {
-                        self.save_storage();
-                        self.switch_screen(Screen::GameCenter);
-                        return true;
-                    }
-                    TapRushAction::Stay => {}
-                }
-                dirty = self.tap_rush.needs_animation() || self.tap_rush.take_redraw_request();
-            }
-            Screen::PseudoRacer => {
-                match self.pseudo_racer.update(input, touch, dt_ms) {
-                    PseudoRacerAction::ExitGameCenter => {
-                        self.save_storage();
-                        self.switch_screen(Screen::GameCenter);
-                        return true;
-                    }
-                    PseudoRacerAction::Stay => {}
-                }
-                if self.pseudo_racer.take_persist_request() {
-                    self.save_storage();
-                }
-                if self.pseudo_racer.take_full_redraw_request() {
-                    self.force_full_redraw = true;
-                    dirty = true;
-                }
-                dirty = self.pseudo_racer.take_render_request()
-                    || dirty
-                    || input.k0_just_pressed
-                    || input.k1_just_pressed
-                    || input.wkup_just_pressed
-                    || touch.just_released;
-            }
-            Screen::GraphicsLab => {
-                match self.graphics_lab.update(input, touch, dt_ms) {
-                    GraphicsLabAction::ExitGameCenter => {
-                        self.switch_screen(Screen::GameCenter);
-                        return true;
-                    }
-                    GraphicsLabAction::Stay => {}
-                }
-                if self.graphics_lab.take_full_redraw_request() {
-                    self.force_full_redraw = true;
-                    dirty = true;
-                }
-                dirty = self.graphics_lab.take_render_request()
-                    || dirty
-                    || input.k0_just_pressed
-                    || input.k1_just_pressed
-                    || input.wkup_just_pressed
-                    || touch.just_released;
-            }
+            Screen::Album
+            | Screen::GameCenter
+            | Screen::MapSelect
+            | Screen::DungeonCore
+            | Screen::Paint
+            | Screen::AutoBattle
+            | Screen::TapRush
+            | Screen::PseudoRacer
+            | Screen::GraphicsLab => unreachable!("hosted app screens are handled above"),
         }
         dirty
     }
@@ -493,7 +338,7 @@ impl MiniOs {
             ThemeMode::Dark => ThemeMode::Light,
             ThemeMode::Light => ThemeMode::Dark,
         };
-        let _ = self.save_storage();
+        self.request_storage_save();
         self.force_full_redraw = true;
     }
 
@@ -504,48 +349,7 @@ impl MiniOs {
     }
 
     fn launch_app(&mut self, app_id: AppId) {
-        self.recent_app = Some(app_id);
-        self.home_index = app_registry::home_slot_for_app(app_id);
-        self.game_center.select_app(app_id);
-        if matches!(
-            app_id,
-            AppId::Album
-                | AppId::Paint
-                | AppId::DungeonCore
-                | AppId::AutoBattle
-                | AppId::TapRush
-                | AppId::PseudoRacer
-                | AppId::GraphicsLab
-        ) {
-            self.performance_focus_app = Some(app_id);
-        }
-        let _ = self.save_storage();
-        match app_id {
-            AppId::Album => self.switch_screen(Screen::Album),
-            AppId::GameCenter => self.switch_screen(Screen::GameCenter),
-            AppId::Paint => self.switch_screen(Screen::Paint),
-            AppId::Settings => self.switch_screen(Screen::Settings),
-            AppId::DungeonCore => self.switch_screen(Screen::MapSelect),
-            AppId::AutoBattle => {
-                self.auto_battle.enter();
-                self.switch_screen(Screen::AutoBattle);
-            }
-            AppId::TapRush => self.switch_screen(Screen::TapRush),
-            AppId::PseudoRacer => {
-                self.pseudo_racer.enter();
-                self.switch_screen(Screen::PseudoRacer);
-            }
-            AppId::GraphicsLab => {
-                self.graphics_lab.enter();
-                self.switch_screen(Screen::GraphicsLab);
-            }
-        }
-    }
-
-    fn launch_map(&mut self) {
-        self.dungeon.set_map(self.map_index);
-        self.performance_focus_app = Some(AppId::DungeonCore);
-        self.switch_screen(Screen::DungeonCore);
+        self.begin_app_launch(app_id, true);
     }
 
     fn activate_settings_item(&mut self) -> bool {
@@ -556,12 +360,12 @@ impl MiniOs {
             }
             1 => {
                 self.language.toggle();
-                let _ = self.save_storage();
+                self.request_storage_save();
                 true
             }
             2 => {
                 self.render_strategy = self.render_strategy.next();
-                let _ = self.save_storage();
+                self.request_storage_save();
                 true
             }
             3 => {

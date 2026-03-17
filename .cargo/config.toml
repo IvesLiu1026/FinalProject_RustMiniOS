@@ -2,7 +2,7 @@
 target = "thumbv7em-none-eabihf"
 
 [target.thumbv7em-none-eabihf]
-linker = "/Users/ivesliu/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-gcc"
+linker = "./tools/arm-gcc.sh"
 runner = "./flash.sh"
 rustflags = [
   "-C",

@@ -31,7 +31,6 @@ Suggested naming:
 Processing command:
 
 ```bash
-cd /Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS
 ./tools/process_test_media.sh
 ```
 

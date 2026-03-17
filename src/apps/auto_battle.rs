@@ -17,10 +17,6 @@ const ARENA_INNER_X: u16 = ARENA_X + 4;
 const ARENA_INNER_Y: u16 = ARENA_Y + 4;
 const ARENA_INNER_W: u16 = ARENA_W - 8;
 const ARENA_INNER_H: u16 = ARENA_H - 8;
-const PANEL_W: u16 = 124;
-const PANEL_H: u16 = 58;
-const PANEL_X: u16 = ARENA_X + ARENA_W - PANEL_W - 8;
-const PANEL_Y: u16 = ARENA_Y + 8;
 
 const PLAYER_SIZE: i16 = 8;
 const PLAYER_BASE_SPEED: f32 = 0.095;
@@ -447,23 +443,6 @@ pub enum AutoBattleAction {
 pub enum AutoBattleRedraw {
     Full,
     Arena,
-    ArenaAndPanel,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-struct PanelSnapshot {
-    moving: bool,
-    health: i16,
-    max_health: i16,
-    kills: u16,
-    stage: u8,
-    wave: u8,
-    remaining: u8,
-    best_kills: u16,
-    wave_kind: WaveKind,
-    medkit_active: bool,
-    boss_hp: i16,
-    boss_max_hp: i16,
 }
 
 #[derive(Clone, Copy)]
@@ -743,12 +722,7 @@ impl AutoBattleApp {
 
     fn request_redraw(&mut self, redraw: AutoBattleRedraw) {
         self.redraw_pending = Some(match (self.redraw_pending, redraw) {
-            (Some(AutoBattleRedraw::Full), _) | (_, AutoBattleRedraw::Full) => {
-                AutoBattleRedraw::Full
-            }
-            (Some(AutoBattleRedraw::ArenaAndPanel), _) | (_, AutoBattleRedraw::ArenaAndPanel) => {
-                AutoBattleRedraw::ArenaAndPanel
-            }
+            (Some(AutoBattleRedraw::Full), _) | (_, AutoBattleRedraw::Full) => AutoBattleRedraw::Full,
             (Some(existing), _) => existing,
             (None, value) => value,
         });
@@ -1298,31 +1272,6 @@ impl AutoBattleApp {
         self.state = BattleState::Defeat;
         self.request_persist();
         self.request_redraw(AutoBattleRedraw::Full);
-    }
-
-    fn panel_snapshot(&self) -> PanelSnapshot {
-        let (boss_hp, boss_max_hp) = self.active_boss_stats().unwrap_or((0, 0));
-        PanelSnapshot {
-            moving: self.moving,
-            health: self.health,
-            max_health: self.max_health,
-            kills: self.kills,
-            stage: self.current_stage,
-            wave: self.wave_tracker.wave,
-            remaining: self.wave_tracker.remaining_to_kill,
-            best_kills: self.profile.best_kills,
-            wave_kind: self.wave_tracker.kind,
-            medkit_active: self.pickups.iter().any(|pickup| pickup.active),
-            boss_hp,
-            boss_max_hp,
-        }
-    }
-
-    fn active_boss_stats(&self) -> Option<(i16, i16)> {
-        self.enemies
-            .iter()
-            .find(|enemy| enemy.active && enemy.kind.is_boss())
-            .map(|enemy| (enemy.hp.max(0), enemy.max_hp.max(1)))
     }
 
     fn active_boss_kind(&self) -> Option<EnemyKind> {

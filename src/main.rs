@@ -18,6 +18,7 @@ mod storage_codec;
 mod system_info;
 mod touch;
 mod ui;
+mod shell_contract;
 
 use board::{millis, Board};
 use cortex_m_rt::{entry, exception};
@@ -77,6 +78,7 @@ fn main() -> ! {
         let buttons = board.poll_buttons();
         let touch_state = touch.update(sim_dt as u16);
         let dirty = os.update(&mut board, &buttons, &touch_state, &mut touch, sim_dt);
+        os.service_background_tasks(&buttons, &touch_state);
         let full_refresh = os.take_full_redraw();
         if dirty || full_refresh {
             os.render(&mut display, &board, &touch_state, full_refresh);

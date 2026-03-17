@@ -3,6 +3,7 @@ use heapless::String;
 use crate::app_registry::{descriptor, game_center_apps, game_center_slot_for_app, AppId};
 use crate::board::ButtonSnapshot;
 use crate::display::{color, palette, Display, ThemeMode};
+use crate::shell_contract::{reduce_game_center, GameCenterIntent, HostedAppNavigation};
 use crate::touch::TouchState;
 use crate::ui::{
     draw_app_icon, draw_footer_hint, draw_gradient_background, draw_info_strip, draw_shell_window,
@@ -38,36 +39,38 @@ impl GameCenterApp {
     }
 
     pub fn update(&mut self, input: &ButtonSnapshot, touch: &TouchState) -> GameCenterAction {
+        let mut intent = GameCenterIntent::Idle;
         if input.home_chord()
             || touch_released_in_rect(touch, NAV_BACK_X, NAV_BACK_Y, NAV_BACK_W, NAV_BACK_H)
         {
-            return GameCenterAction::ExitHome;
-        }
-
-        let app_count = game_center_apps().len();
-        if input.k0_just_pressed {
-            self.selected = (self.selected + app_count - 1) % app_count;
-        }
-        if input.wkup_just_pressed {
-            self.selected = (self.selected + 1) % app_count;
-        }
-        if input.k1_just_pressed {
-            return self.activate_selected();
-        }
-
-        if touch.just_released {
-            for index in 0..app_count {
+            intent = GameCenterIntent::ExitHome;
+        } else if input.k0_just_pressed {
+            intent = GameCenterIntent::Previous;
+        } else if input.wkup_just_pressed {
+            intent = GameCenterIntent::Next;
+        } else if input.k1_just_pressed {
+            intent = GameCenterIntent::LaunchCurrent;
+        } else if touch.just_released {
+            for index in 0..game_center_apps().len() {
                 let y = LIST_Y + 8 + index as u16 * LIST_STEP;
                 if touch_released_in_rect(touch, LIST_X + 8, y, LIST_W - 16, LIST_CARD_H) {
-                    if self.selected == index {
-                        return self.activate_selected();
-                    }
-                    self.selected = index;
+                    intent = GameCenterIntent::SelectSlot(index);
+                    break;
                 }
             }
         }
 
-        GameCenterAction::Stay
+        let outcome = reduce_game_center(self.selected, game_center_apps(), intent);
+        self.selected = outcome.next_selected;
+        match outcome.navigation {
+            HostedAppNavigation::Stay => GameCenterAction::Stay,
+            HostedAppNavigation::Launch(app_id) => GameCenterAction::Launch(app_id),
+            HostedAppNavigation::Exit {
+                app_id: AppId::GameCenter,
+                persist_state: false,
+            } => GameCenterAction::ExitHome,
+            _ => GameCenterAction::Stay,
+        }
     }
 
     pub fn render(&self, display: &mut Display, theme: ThemeMode, zh_mode: bool) {
@@ -313,14 +316,6 @@ impl GameCenterApp {
             color_box(ui.panel_alt, accent, ui),
             1,
         );
-    }
-
-    fn activate_selected(&self) -> GameCenterAction {
-        game_center_apps()
-            .get(self.selected)
-            .copied()
-            .map(GameCenterAction::Launch)
-            .unwrap_or(GameCenterAction::Stay)
     }
 }
 

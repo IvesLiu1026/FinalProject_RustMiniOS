@@ -88,7 +88,7 @@ impl MiniOs {
         touch_driver.set_calibration(calibration);
         self.touch_calibration = calibration;
         self.touch_ready = true;
-        let _ = self.save_storage();
+        self.request_storage_flush();
         true
     }
 }

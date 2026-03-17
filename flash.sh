@@ -1,19 +1,37 @@
 #!/bin/zsh
 set -euo pipefail
 
-ELF_PATH="${1:?missing firmware path}"
-PACKAGES_DIR="${PLATFORMIO_PACKAGES_DIR:-$HOME/.platformio/packages}"
-OPENOCD="$PACKAGES_DIR/tool-openocd/bin/openocd"
-SCRIPT_DIR="$PACKAGES_DIR/tool-openocd/openocd/scripts"
+ROOT_DIR="${0:A:h}"
+DEFAULT_ELF="$ROOT_DIR/firmware/finalproject_rustminios.elf"
+ELF_PATH="${1:-}"
 
-if [[ ! -x "$OPENOCD" ]]; then
-  echo "OpenOCD not found at: $OPENOCD" >&2
-  echo "Set PLATFORMIO_PACKAGES_DIR if your PlatformIO packages live elsewhere." >&2
+if [[ -z "$ELF_PATH" && -f "$DEFAULT_ELF" ]]; then
+  ELF_PATH="$DEFAULT_ELF"
+fi
+
+if [[ -z "$ELF_PATH" ]]; then
+  echo "Usage: ./flash.sh <path-to-firmware.elf>" >&2
+  echo "Tip: release bundles can run ./flash.sh directly from the bundle root." >&2
   exit 1
 fi
 
-"$OPENOCD" \
-  -s "$SCRIPT_DIR" \
-  -f interface/stlink.cfg \
-  -f target/stm32f4x.cfg \
-  -c "program $ELF_PATH verify reset exit"
+FLASH_TOOL="${MINIOS_FLASH_TOOL:-auto}"
+
+case "$FLASH_TOOL" in
+  auto)
+    if command -v probe-rs >/dev/null 2>&1; then
+      exec "$ROOT_DIR/tools/flash-probe-rs.sh" "$ELF_PATH"
+    fi
+    exec "$ROOT_DIR/tools/flash-openocd.sh" "$ELF_PATH"
+    ;;
+  probe-rs | probe)
+    exec "$ROOT_DIR/tools/flash-probe-rs.sh" "$ELF_PATH"
+    ;;
+  openocd)
+    exec "$ROOT_DIR/tools/flash-openocd.sh" "$ELF_PATH"
+    ;;
+  *)
+    echo "Unknown MINIOS_FLASH_TOOL='$FLASH_TOOL' (expected auto, probe-rs, or openocd)." >&2
+    exit 1
+    ;;
+esac

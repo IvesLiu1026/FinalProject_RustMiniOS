@@ -32,14 +32,13 @@ If your board only exposes ST-Link for flashing, you will usually still need a s
 
 The companion serves the already-processed media inside the repo:
 
-- stills: [assets/test_media/converted/firmware/stills](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/assets/test_media/converted/firmware/stills)
-- motion: [assets/test_media/converted/firmware/motion](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/assets/test_media/converted/firmware/motion)
-- manifests: [assets/test_media/converted/manifests](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/assets/test_media/converted/manifests)
+- stills: [assets/test_media/converted/firmware/stills](../assets/test_media/converted/firmware/stills)
+- motion: [assets/test_media/converted/firmware/motion](../assets/test_media/converted/firmware/motion)
+- manifests: [assets/test_media/converted/manifests](../assets/test_media/converted/manifests)
 
 If you add or replace images/GIFs, run:
 
 ```bash
-cd /Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS
 ./tools/process_test_media.sh
 ```
 
@@ -48,22 +47,20 @@ cd /Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS
 List ports first if needed:
 
 ```bash
-cd /Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/mac_companion
-cargo run -- --list-ports
+(cd mac_companion && cargo run -- --list-ports)
 ```
 
 Start the companion:
 
 ```bash
-cd /Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/mac_companion
-cargo run -- --port /dev/tty.usbserial-XXXX
+(cd mac_companion && cargo run -- --port /dev/tty.usbserial-XXXX)
 ```
 
 Optional flags:
 
 ```bash
 --baud 921600
---media-root /Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/assets/test_media/converted
+--media-root /path/to/FinalProject_RustMiniOS/assets/test_media/converted
 ```
 
 ## Firmware build behavior
@@ -73,7 +70,6 @@ The default firmware build keeps the embedded Album path.
 To switch to the companion build:
 
 ```bash
-cd /Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS
 MINIOS_EMBED_ALBUM=0 cargo build --release
 ```
 

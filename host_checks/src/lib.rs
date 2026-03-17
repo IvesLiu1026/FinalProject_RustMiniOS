@@ -59,6 +59,9 @@ pub mod touch {
 #[path = "../../src/app_registry.rs"]
 pub mod app_registry;
 
+#[path = "../../src/shell_contract.rs"]
+pub mod shell_contract;
+
 pub mod storage {
     use crate::app_registry::AppId;
     use crate::display::ThemeMode;

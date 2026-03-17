@@ -1,6 +1,7 @@
 /target
 /host_checks/target
 /mac_companion/target
+/dist
 .DS_Store
 .vscode
 assets/raw

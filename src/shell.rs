@@ -1,3 +1,5 @@
+#[path = "shell/app_host.rs"]
+mod app_host;
 #[path = "shell/benchmark.rs"]
 mod benchmark;
 #[path = "shell/calibration.rs"]
@@ -26,6 +28,7 @@ use crate::dungeon::{DungeonAction, DungeonApp, RenderStrategy};
 use crate::storage::{
     self, PersistedAppData, PersistedState, PersistedSystemSettings, STATION_HUNTER_STAGE_COUNT,
 };
+use crate::shell_contract::{app_route, Screen};
 use crate::touch::{Touch, TouchCalibration, TouchState};
 use crate::ui::{
     desktop_icon_rect, render_about, render_control_room, render_diagnostics, render_home,
@@ -36,71 +39,6 @@ use crate::ui::{
     DIAG_CLEAR_X, DIAG_RESET_X, NAV_BACK_H, NAV_BACK_W, NAV_BACK_X, NAV_BACK_Y, PERF_BENCH_H,
     PERF_BENCH_W, PERF_BENCH_X, PERF_BENCH_Y, SETTINGS_ROW_HEIGHT, SETTINGS_VISIBLE_ROWS,
 };
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Screen {
-    Home,
-    Album,
-    GameCenter,
-    MapSelect,
-    Settings,
-    PerformanceConsole,
-    Benchmark,
-    About,
-    Diagnostics,
-    SafeMode,
-    TouchCalibrate,
-    ControlRoom,
-    DungeonCore,
-    AutoBattle,
-    Paint,
-    TapRush,
-    PseudoRacer,
-    GraphicsLab,
-}
-
-impl Screen {
-    fn label(self, zh_mode: bool) -> &'static str {
-        match (self, zh_mode) {
-            (Self::Home, true) => "首頁",
-            (Self::Album, true) => "相簿",
-            (Self::GameCenter, true) => "遊戲中心",
-            (Self::MapSelect, true) => "地圖選單",
-            (Self::Settings, true) => "設定",
-            (Self::PerformanceConsole, true) => "效能儀表",
-            (Self::Benchmark, true) => "效能測試",
-            (Self::About, true) => "關於系統",
-            (Self::Diagnostics, true) => "系統診斷",
-            (Self::SafeMode, true) => "安全模式",
-            (Self::TouchCalibrate, true) => "觸控校正",
-            (Self::ControlRoom, true) => "控制室",
-            (Self::DungeonCore, true) => "地城核心",
-            (Self::AutoBattle, true) => "定點獵手",
-            (Self::Paint, true) => "像素畫板",
-            (Self::TapRush, true) => "Tap Rush",
-            (Self::PseudoRacer, true) => "假 3D 賽車",
-            (Self::GraphicsLab, true) => "圖學實驗室",
-            (Self::Home, false) => "HOME",
-            (Self::Album, false) => "ALBUM",
-            (Self::GameCenter, false) => "GAME CENTER",
-            (Self::MapSelect, false) => "MAP SELECT",
-            (Self::Settings, false) => "SETTINGS",
-            (Self::PerformanceConsole, false) => "PERFORMANCE",
-            (Self::Benchmark, false) => "BENCHMARK",
-            (Self::About, false) => "ABOUT",
-            (Self::Diagnostics, false) => "DIAGNOSTICS",
-            (Self::SafeMode, false) => "SAFE MODE",
-            (Self::TouchCalibrate, false) => "TOUCH CALIBRATION",
-            (Self::ControlRoom, false) => "CONTROL ROOM",
-            (Self::DungeonCore, false) => "DUNGEON CORE",
-            (Self::AutoBattle, false) => "STATION HUNTER",
-            (Self::Paint, false) => "PIXEL PAINT",
-            (Self::TapRush, false) => "TAP RUSH",
-            (Self::PseudoRacer, false) => "PSEUDO RACER",
-            (Self::GraphicsLab, false) => "GRAPHICS LAB",
-        }
-    }
-}
 
 const SETTINGS_ITEM_COUNT: usize = 9;
 const BENCH_COUNT: usize = 4;
@@ -285,6 +223,9 @@ pub struct MiniOs {
     diagnostics_notice: Option<DiagnosticsNotice>,
     safe_mode_index: usize,
     safe_boot_session: bool,
+    storage_dirty: bool,
+    storage_dirty_since_ms: u32,
+    storage_flush_requested: bool,
     showcase_mode: Option<ShowcaseMode>,
     album_redraw: Option<AlbumRedraw>,
     paint_redraw: Option<PaintRedraw>,
@@ -341,6 +282,9 @@ impl MiniOs {
             diagnostics_notice: None,
             safe_mode_index: 0,
             safe_boot_session: false,
+            storage_dirty: false,
+            storage_dirty_since_ms: 0,
+            storage_flush_requested: false,
             showcase_mode: None,
             album_redraw: None,
             paint_redraw: None,
@@ -358,5 +302,50 @@ impl MiniOs {
 
     pub fn touch_ready(&self) -> bool {
         self.touch_ready
+    }
+
+    fn focus_app(&mut self, app_id: AppId) {
+        if app_route(app_id).track_performance {
+            self.performance_focus_app = Some(app_id);
+        }
+    }
+
+    fn prepare_app_entry(&mut self, app_id: AppId) {
+        match app_id {
+            AppId::AutoBattle => self.auto_battle.enter(),
+            AppId::PseudoRacer => self.pseudo_racer.enter(),
+            AppId::GraphicsLab => self.graphics_lab.enter(),
+            _ => {}
+        }
+    }
+
+    fn begin_app_launch(&mut self, app_id: AppId, persist_selection: bool) {
+        self.recent_app = Some(app_id);
+        self.home_index = app_registry::home_slot_for_app(app_id);
+        self.game_center.select_app(app_id);
+        self.focus_app(app_id);
+        if persist_selection {
+            self.request_storage_save();
+        }
+        self.prepare_app_entry(app_id);
+        self.switch_screen(app_route(app_id).entry_screen);
+    }
+
+    fn show_app_screen(&mut self, app_id: AppId) {
+        self.focus_app(app_id);
+        self.switch_screen(app_route(app_id).entry_screen);
+    }
+
+    fn prepare_map_launch(&mut self) {
+        self.dungeon.set_map(self.map_index);
+        self.focus_app(AppId::DungeonCore);
+    }
+
+    fn exit_app(&mut self, app_id: AppId, persist_state: bool) -> bool {
+        if persist_state {
+            self.request_storage_save();
+        }
+        self.switch_screen(app_route(app_id).exit_screen);
+        true
     }
 }

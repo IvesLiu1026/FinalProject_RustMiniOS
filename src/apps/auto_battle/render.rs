@@ -42,14 +42,7 @@ impl AutoBattleApp {
         let ui = palette(theme);
         match redraw {
             AutoBattleRedraw::Full => self.render(display, theme, zh_mode),
-            AutoBattleRedraw::Arena => {
-                self.render_running_arena(display, zh_mode, &ui);
-                self.render_panel_region(display, zh_mode, &ui);
-            }
-            AutoBattleRedraw::ArenaAndPanel => {
-                self.render_running_arena(display, zh_mode, &ui);
-                self.render_panel_region(display, zh_mode, &ui);
-            }
+            AutoBattleRedraw::Arena => self.render_running_arena(display, zh_mode, &ui),
         }
     }
 
@@ -695,7 +688,6 @@ impl AutoBattleApp {
 
         self.render_header(display, zh_mode, &ui);
         self.render_arena_region(display, zh_mode, &ui);
-        self.render_panel_region(display, zh_mode, &ui);
 
         if self.state == BattleState::BossReward {
             self.render_reward_overlay(display, zh_mode, &ui);
@@ -779,15 +771,6 @@ impl AutoBattleApp {
         self.render_arena_dynamic(display, zh_mode, ui);
         self.last_arena_frame = self.capture_arena_frame();
         self.arena_frame_valid = self.state == BattleState::Running;
-    }
-
-    fn render_panel_region(
-        &self,
-        display: &mut Display,
-        zh_mode: bool,
-        ui: &crate::display::Palette,
-    ) {
-        self.render_panel(display, zh_mode, ui);
     }
 
     fn render_running_arena(
@@ -1362,8 +1345,50 @@ impl AutoBattleApp {
             );
         }
 
+        self.render_player_status_bars(display, ui, px, py);
+
         if self.banner_active() {
             self.render_wave_banner(display, zh_mode, ui);
+        }
+    }
+
+    fn render_player_status_bars(
+        &self,
+        display: &mut Display,
+        ui: &crate::display::Palette,
+        px: i16,
+        py: i16,
+    ) {
+        let bar_x = px.saturating_sub(12) as u16;
+        let hp_y = py.saturating_sub(18) as u16;
+        let xp_y = py.saturating_sub(13) as u16;
+        let bar_w = 24u16;
+        let hp_fill = ((self.health.max(0) as u32 * bar_w as u32) / self.max_health.max(1) as u32)
+            as u16;
+        let xp_target = Self::xp_to_next_level(self.profile.player_level).max(1) as u32;
+        let xp_fill =
+            ((self.profile.player_xp.min(xp_target as u16) as u32 * bar_w as u32) / xp_target)
+                as u16;
+
+        display.fill_rect(bar_x, hp_y, bar_w, 3, color::mix(ui.shadow, ui.panel_alt, 34));
+        if hp_fill > 0 {
+            display.fill_rect(
+                bar_x,
+                hp_y,
+                hp_fill.min(bar_w),
+                3,
+                color::mix(ui.lime, ui.white, 92),
+            );
+        }
+        display.fill_rect(bar_x, xp_y, bar_w, 3, color::mix(ui.shadow, ui.indigo, 34));
+        if xp_fill > 0 {
+            display.fill_rect(
+                bar_x,
+                xp_y,
+                xp_fill.min(bar_w),
+                3,
+                color::mix(ui.cyan, ui.white, 84),
+            );
         }
     }
 
@@ -1441,196 +1466,6 @@ impl AutoBattleApp {
             display.panel(BUFF_X + 218, y + 8, 32, 18, fill, accent);
             display.centered_text(BUFF_X + 234, y + 13, "PICK", ui.text, fill, 1);
         }
-    }
-
-    fn render_panel(&self, display: &mut Display, zh_mode: bool, ui: &crate::display::Palette) {
-        let shell = color::mix(ui.panel_alt, ui.shadow, 42);
-        display.fill_rect(
-            PANEL_X + 2,
-            PANEL_Y + 2,
-            PANEL_W,
-            PANEL_H,
-            color::mix(ui.shadow, ui.cyan, 14),
-        );
-        display.panel(PANEL_X, PANEL_Y, PANEL_W, PANEL_H, shell, ui.cyan);
-
-        let hp_bar_w = PANEL_W - 16;
-        let wave_fill =
-            ((self.wave_tracker.wave as u32 * hp_bar_w as u32) / WAVES_PER_STAGE as u32) as u16;
-        let wave_accent = match self.wave_tracker.kind {
-            WaveKind::Standard => ui.cyan,
-            WaveKind::Pressure => ui.orange,
-            WaveKind::Elite => ui.amber,
-            WaveKind::Boss => ui.rose,
-        };
-        let wave_chip = match (zh_mode, self.wave_tracker.kind) {
-            (true, WaveKind::Standard) => "一般",
-            (true, WaveKind::Pressure) => "壓力",
-            (true, WaveKind::Elite) => "精英",
-            (true, WaveKind::Boss) => "BOSS",
-            (false, WaveKind::Standard) => "STD",
-            (false, WaveKind::Pressure) => "PRESS",
-            (false, WaveKind::Elite) => "ELITE",
-            (false, WaveKind::Boss) => "BOSS",
-        };
-        let mut hp_text: String<16> = String::new();
-        let _ = write!(
-            &mut hp_text,
-            "{}/{}",
-            self.health.max(0),
-            self.max_health.max(1)
-        );
-        let kills_text = format_u16(self.kills);
-        let mut best_text: String<16> = String::new();
-        let _ = write!(
-            &mut best_text,
-            "B{}",
-            self.stage_best_kills(self.stage_index())
-        );
-        let mut stage_text: String<8> = String::new();
-        let _ = write!(&mut stage_text, "S{}", self.current_stage);
-
-        display.panel(PANEL_X + 8, PANEL_Y + 6, 42, 12, shell, ui.lime);
-        display.text(PANEL_X + 12, PANEL_Y + 9, "HP", ui.text_muted, shell, 1);
-        display.text(PANEL_X + 24, PANEL_Y + 9, &hp_text, ui.text, shell, 1);
-        display.panel(PANEL_X + 54, PANEL_Y + 6, 30, 12, shell, ui.cyan);
-        display.text(PANEL_X + 58, PANEL_Y + 9, &kills_text, ui.text, shell, 1);
-        display.panel(PANEL_X + 84, PANEL_Y + 6, 32, 12, shell, ui.amber);
-        display.text(PANEL_X + 92, PANEL_Y + 9, &stage_text, ui.text, shell, 1);
-
-        display.text(
-            PANEL_X + 8,
-            PANEL_Y + 22,
-            if self.wave_tracker.kind == WaveKind::Boss {
-                if zh_mode {
-                    "Boss 核心"
-                } else {
-                    "BOSS CORE"
-                }
-            } else if zh_mode {
-                "波次進度"
-            } else {
-                "WAVE FLOW"
-            },
-            ui.text_muted,
-            shell,
-            1,
-        );
-        display.fill_rect(PANEL_X + 8, PANEL_Y + 31, hp_bar_w, 5, ui.shadow);
-        display.fill_rect(
-            PANEL_X + 8,
-            PANEL_Y + 31,
-            if self.wave_tracker.kind == WaveKind::Boss {
-                if let Some((boss_hp, boss_max_hp)) = self.active_boss_stats() {
-                    ((boss_hp.max(0) as u16 * hp_bar_w) / boss_max_hp.max(1) as u16)
-                        .max(1)
-                        .min(hp_bar_w)
-                } else {
-                    1
-                }
-            } else {
-                wave_fill.max(1)
-            },
-            5,
-            if self.wave_tracker.kind == WaveKind::Boss {
-                ui.rose
-            } else {
-                ui.amber
-            },
-        );
-        display.fill_rect(
-            PANEL_X + 8,
-            PANEL_Y + 41,
-            42,
-            11,
-            color::mix(shell, wave_accent, 20),
-        );
-        display.stroke_rect(PANEL_X + 8, PANEL_Y + 41, 42, 11, 1, wave_accent);
-        display.centered_text(
-            PANEL_X + 29,
-            PANEL_Y + 44,
-            wave_chip,
-            ui.text,
-            color::mix(shell, wave_accent, 20),
-            1,
-        );
-
-        if self.pickups.iter().any(|pickup| pickup.active) {
-            display.fill_rect(
-                PANEL_X + 54,
-                PANEL_Y + 41,
-                28,
-                11,
-                color::mix(shell, ui.lime, 20),
-            );
-            display.stroke_rect(PANEL_X + 54, PANEL_Y + 41, 28, 11, 1, ui.lime);
-            display.centered_text(
-                PANEL_X + 68,
-                PANEL_Y + 44,
-                "MED",
-                ui.text,
-                color::mix(shell, ui.lime, 20),
-                1,
-            );
-        }
-
-        let mut status_text: String<24> = String::new();
-        if self.wave_tracker.kind == WaveKind::Boss {
-            let _ = write!(
-                &mut status_text,
-                "{} {}",
-                if zh_mode { "目標" } else { "TARGET" },
-                format_u8(self.wave_tracker.remaining_to_kill)
-            );
-        } else {
-            let _ = write!(
-                &mut status_text,
-                "{} {}",
-                if zh_mode { "剩餘" } else { "LEFT" },
-                format_u8(self.wave_tracker.remaining_to_kill)
-            );
-        }
-        display.text(PANEL_X + 86, PANEL_Y + 44, &status_text, ui.text, shell, 1);
-
-        display.text(
-            PANEL_X + 8,
-            PANEL_Y + 54,
-            if self.moving {
-                if zh_mode {
-                    "移動中 / 停下開火"
-                } else {
-                    "MOVE = NO FIRE"
-                }
-            } else if self.wave_tracker.kind == WaveKind::Boss {
-                if let Some(kind) = self.active_boss_kind() {
-                    if zh_mode {
-                        kind.title_zh()
-                    } else {
-                        kind.title_en()
-                    }
-                } else if zh_mode {
-                    "Boss 進場中"
-                } else {
-                    "BOSS INBOUND"
-                }
-            } else if zh_mode {
-                "站穩輸出"
-            } else {
-                "HOLD POSITION"
-            },
-            ui.text_muted,
-            shell,
-            1,
-        );
-        let best_width = display.measure_text(&best_text, 1);
-        display.text(
-            PANEL_X + PANEL_W - best_width - 8,
-            PANEL_Y + 54,
-            &best_text,
-            ui.text,
-            shell,
-            1,
-        );
     }
 
     fn render_wave_banner(

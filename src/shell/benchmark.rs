@@ -176,11 +176,11 @@ impl MiniOs {
         match BENCH_CASES[self.benchmark_mode.case_index] {
             BenchmarkCase::UiFill | BenchmarkCase::RgbBlit => {}
             BenchmarkCase::PseudoRacer => {
-                self.performance_focus_app = Some(AppId::PseudoRacer);
+                self.focus_app(AppId::PseudoRacer);
                 self.pseudo_racer.start_showcase(1);
             }
             BenchmarkCase::GraphicsLab => {
-                self.performance_focus_app = Some(AppId::GraphicsLab);
+                self.focus_app(AppId::GraphicsLab);
                 self.graphics_lab.start_showcase(2);
             }
         }
@@ -208,7 +208,7 @@ impl MiniOs {
                     dt_ms,
                 );
                 if self.pseudo_racer.take_persist_request() {
-                    self.save_storage();
+                    self.request_storage_save();
                 }
                 if self.pseudo_racer.take_full_redraw_request() {
                     self.benchmark_mode.stage_full_redraw = true;

@@ -206,7 +206,6 @@ impl AutoBattleApp {
     }
 
     fn update_running(&mut self, touch: &TouchState, dt_ms: u32) {
-        let panel_before = self.panel_snapshot();
         self.hit_invuln_ms = self.hit_invuln_ms.saturating_sub(dt_ms as u16);
         self.shot_cooldown_ms = self.shot_cooldown_ms.saturating_sub(dt_ms as u16);
         self.damage_flash_ms = self.damage_flash_ms.saturating_sub(dt_ms as u16);
@@ -242,11 +241,7 @@ impl AutoBattleApp {
 
         self.update_pickups();
         if self.boss_intro_ms > 0 {
-            if self.panel_snapshot() != panel_before {
-                self.request_redraw(AutoBattleRedraw::ArenaAndPanel);
-            } else {
-                self.request_redraw(AutoBattleRedraw::Arena);
-            }
+            self.request_redraw(AutoBattleRedraw::Arena);
             return;
         }
 
@@ -279,9 +274,7 @@ impl AutoBattleApp {
             || self.weapon_flash_ms > 0
             || self.banner_active();
 
-        if self.panel_snapshot() != panel_before {
-            self.request_redraw(AutoBattleRedraw::ArenaAndPanel);
-        } else if arena_fx_active {
+        if arena_fx_active {
             self.request_redraw(AutoBattleRedraw::Arena);
         } else {
             self.request_redraw(AutoBattleRedraw::Arena);
@@ -335,7 +328,7 @@ impl AutoBattleApp {
             }
         }
         if changed {
-            self.request_redraw(AutoBattleRedraw::ArenaAndPanel);
+            self.request_redraw(AutoBattleRedraw::Arena);
         }
     }
 

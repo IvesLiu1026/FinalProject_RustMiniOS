@@ -44,6 +44,10 @@ impl MiniOs {
         full_refresh: bool,
         screen: Screen,
     ) {
+        if self.render_hosted_app(display, touch, full_refresh) {
+            return;
+        }
+
         match screen {
             Screen::Home => render_home(
                 display,
@@ -53,22 +57,6 @@ impl MiniOs {
                 self.fps_estimate,
                 millis() / 1000,
             ),
-            Screen::Album => {
-                if !full_refresh && self.album_redraw == Some(AlbumRedraw::MotionFrame) {
-                    self.album.render_motion_frame(display);
-                } else {
-                    self.album
-                        .render(display, self.theme, self.language.is_zh());
-                }
-                self.album_redraw = None;
-            }
-            Screen::GameCenter => {
-                self.game_center
-                    .render(display, self.theme, self.language.is_zh())
-            }
-            Screen::MapSelect => {
-                render_map_select(display, self.map_index, self.theme, self.language.is_zh())
-            }
             Screen::Settings => render_settings(
                 display,
                 self.theme,
@@ -128,60 +116,15 @@ impl MiniOs {
             Screen::ControlRoom => {
                 render_control_room(display, board, self.theme, self.language.is_zh())
             }
-            Screen::DungeonCore => self.dungeon.render(
-                display,
-                touch,
-                full_refresh,
-                self.theme,
-                self.language.is_zh(),
-                self.fps_estimate,
-                self.render_strategy,
-            ),
-            Screen::Paint => {
-                if full_refresh {
-                    self.paint
-                        .render(display, self.theme, self.language.is_zh());
-                } else if let Some(redraw) = self.paint_redraw {
-                    self.paint
-                        .render_partial(display, self.theme, self.language.is_zh(), redraw);
-                }
-                self.paint_redraw = None;
-            }
-            Screen::AutoBattle => {
-                if full_refresh {
-                    self.auto_battle
-                        .render(display, self.theme, self.language.is_zh());
-                } else if let Some(redraw) = self.auto_battle_redraw {
-                    self.auto_battle.render_partial(
-                        display,
-                        self.theme,
-                        self.language.is_zh(),
-                        redraw,
-                    );
-                }
-                self.auto_battle_redraw = None;
-            }
-            Screen::TapRush => self
-                .tap_rush
-                .render(display, self.theme, self.language.is_zh()),
-            Screen::PseudoRacer => {
-                if !full_refresh && self.pseudo_racer.can_partial_render() {
-                    self.pseudo_racer
-                        .render_partial(display, self.theme, self.language.is_zh());
-                } else {
-                    self.pseudo_racer
-                        .render(display, self.theme, self.language.is_zh());
-                }
-            }
-            Screen::GraphicsLab => {
-                if !full_refresh && self.graphics_lab.can_partial_render() {
-                    self.graphics_lab
-                        .render_partial(display, self.theme, self.language.is_zh());
-                } else {
-                    self.graphics_lab
-                        .render(display, self.theme, self.language.is_zh());
-                }
-            }
+            Screen::Album
+            | Screen::GameCenter
+            | Screen::MapSelect
+            | Screen::DungeonCore
+            | Screen::Paint
+            | Screen::AutoBattle
+            | Screen::TapRush
+            | Screen::PseudoRacer
+            | Screen::GraphicsLab => unreachable!("hosted app screens are handled above"),
         }
     }
 
@@ -241,30 +184,15 @@ impl MiniOs {
     }
 
     fn performance_render_pipeline(&self) -> &'static str {
-        match self.performance_focus_app {
-            Some(AppId::Album) => "RGB565 STILL / MOTION",
-            Some(AppId::GameCenter) => "RETRO LAUNCHER UI",
-            Some(AppId::Paint) => "PIXEL DIRTY RECT",
-            Some(AppId::Settings) => "CONTROL PANEL UI",
-            Some(AppId::DungeonCore) => "RAYCAST 3D + HUD",
-            Some(AppId::AutoBattle) => "DIRTY RECT ARENA",
-            Some(AppId::TapRush) => "REACTION PANEL",
-            Some(AppId::PseudoRacer) => "71x37 ROAD BUF x4",
-            Some(AppId::GraphicsLab) => "60x36 FB x5",
-            None => "DESKTOP + TASKBAR",
-        }
+        self.performance_focus_app
+            .map(|app_id| app_route(app_id).pipeline_label)
+            .unwrap_or("DESKTOP + TASKBAR")
     }
 
     fn performance_render_cadence(&self) -> &'static str {
-        match self.performance_focus_app {
-            Some(AppId::DungeonCore) => "dynamic / strategy driven",
-            Some(AppId::AutoBattle) => "event + dirty redraw",
-            Some(AppId::PseudoRacer) => "20 FPS target",
-            Some(AppId::GraphicsLab) => "15 FPS target",
-            Some(AppId::Album) => "still / clip cadence",
-            Some(AppId::Paint) => "touch event redraw",
-            _ => "ui event redraw",
-        }
+        self.performance_focus_app
+            .map(|app_id| app_route(app_id).cadence_label)
+            .unwrap_or("ui event redraw")
     }
 }
 

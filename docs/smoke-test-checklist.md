@@ -7,8 +7,7 @@
 先在 Mac 上跑不需要板子的檢查：
 
 ```bash
-cd /Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/host_checks
-cargo test
+(cd host_checks && cargo test)
 ```
 
 這一組會檢查：
@@ -57,7 +56,7 @@ cargo test
 
 ### 6. Auto Hunter
 
-- 進場後 HUD 疊在右上角，地圖近全屏
+- 進場後玩家頭上應顯示 `HP / XP` 兩條狀態列，不應再有右上角大面板擋住怪物
 - 移動時不會射擊，停下來會自動射最近敵人
 - 打出 best kill 後退出再進，最佳擊殺應保留
 - 升級三選一畫面應可正常選擇並回戰鬥
@@ -129,16 +128,12 @@ cargo test
 每次要交板上版本前，建議固定跑：
 
 ```bash
-cd /Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/host_checks
-cargo test
-
-cd /Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS
+(cd host_checks && cargo test)
 cargo build --release
-~/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-size target/thumbv7em-none-eabihf/release/finalproject_rustminios
+./tools/arm-size.sh target/thumbv7em-none-eabihf/release/finalproject_rustminios
 cargo run --release
 
-cd /Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/mac_companion
-cargo build --release
+(cd mac_companion && cargo build --release)
 ```
 
 這樣可以把 `host-side invariants`、`release compile`、`size`、`flash/upload` 串成固定流程。
