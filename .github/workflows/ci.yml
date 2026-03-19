@@ -27,6 +27,11 @@ jobs:
           rustup toolchain install stable --profile minimal
           rustup default stable
 
+      - name: Install Linux serial dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libudev-dev
+
       - name: Run host-side tests
         working-directory: host_checks
         run: cargo test --target x86_64-unknown-linux-gnu
@@ -57,7 +62,11 @@ jobs:
       - name: Install PlatformIO packages
         run: |
           python -m pip install --upgrade pip platformio
-          python -m platformio pkg install -g -p platformio/ststm32
+          python -m platformio pkg install -g \
+            -p platformio/ststm32 \
+            -t platformio/toolchain-gccarmnoneeabi \
+            -t platformio/framework-cmsis \
+            -t platformio/framework-cmsis-stm32f4
 
       - name: Check firmware build
         run: cargo check --target thumbv7em-none-eabihf
