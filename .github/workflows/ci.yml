@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  host-checks:
+    name: Host Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Run host-side tests
+        working-directory: host_checks
+        run: cargo test
+
+      - name: Check Mac companion
+        working-directory: mac_companion
+        run: cargo check
+
+  firmware-check:
+    name: Firmware Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Rust target
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add thumbv7em-none-eabihf
+
+      - name: Install PlatformIO packages
+        run: |
+          python -m pip install --upgrade pip platformio
+          python -m platformio pkg install -g -p platformio/ststm32
+
+      - name: Check firmware build
+        run: cargo check --target thumbv7em-none-eabihf
