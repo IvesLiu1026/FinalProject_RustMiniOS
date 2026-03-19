@@ -29,11 +29,11 @@ jobs:
 
       - name: Run host-side tests
         working-directory: host_checks
-        run: cargo test
+        run: cargo test --target x86_64-unknown-linux-gnu
 
       - name: Check Mac companion
         working-directory: mac_companion
-        run: cargo check
+        run: cargo check --target x86_64-unknown-linux-gnu
 
   firmware-check:
     name: Firmware Check
