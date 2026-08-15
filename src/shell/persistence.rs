@@ -122,7 +122,12 @@ impl MiniOs {
             return;
         }
 
-        if input.k0 || input.k1 || input.wkup || touch.active || touch.just_pressed || touch.just_released
+        if input.k0
+            || input.k1
+            || input.wkup
+            || touch.active
+            || touch.just_pressed
+            || touch.just_released
         {
             return;
         }

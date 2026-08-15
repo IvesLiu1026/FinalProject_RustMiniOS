@@ -108,7 +108,7 @@ cargo build --release
 
 第一個修正不是根治，但可以先把黑屏救回來。
 
-我們在 [memory.x](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/memory.x) 新增 `CCMRAM`，並把 stack 改放到 `CCM RAM`：
+我們在 [memory.x](./memory.x) 新增 `CCMRAM`，並把 stack 改放到 `CCM RAM`：
 
 ```ld
 CCMRAM : ORIGIN = 0x10000000, LENGTH = 64K
@@ -139,8 +139,8 @@ _stack_end = ORIGIN(CCMRAM);
 
 這版的核心改動在：
 
-- [src/dungeon.rs](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/src/dungeon.rs)
-- [src/display.rs](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/src/display.rs)
+- [src/dungeon.rs](./src/dungeon.rs)
+- [src/display.rs](./src/display.rs)
 
 關鍵做法：
 

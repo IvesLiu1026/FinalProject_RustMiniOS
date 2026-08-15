@@ -25,10 +25,10 @@ use crate::apps::{
 use crate::board::{delay_ms, millis, Board, ButtonSnapshot};
 use crate::display::{color, palette, Display, ThemeMode, SCREEN_WIDTH};
 use crate::dungeon::{DungeonAction, DungeonApp, RenderStrategy};
+use crate::shell_contract::{app_route, Screen};
 use crate::storage::{
     self, PersistedAppData, PersistedState, PersistedSystemSettings, STATION_HUNTER_STAGE_COUNT,
 };
-use crate::shell_contract::{app_route, Screen};
 use crate::touch::{Touch, TouchCalibration, TouchState};
 use crate::ui::{
     desktop_icon_rect, render_about, render_control_room, render_diagnostics, render_home,

@@ -722,7 +722,9 @@ impl AutoBattleApp {
 
     fn request_redraw(&mut self, redraw: AutoBattleRedraw) {
         self.redraw_pending = Some(match (self.redraw_pending, redraw) {
-            (Some(AutoBattleRedraw::Full), _) | (_, AutoBattleRedraw::Full) => AutoBattleRedraw::Full,
+            (Some(AutoBattleRedraw::Full), _) | (_, AutoBattleRedraw::Full) => {
+                AutoBattleRedraw::Full
+            }
             (Some(existing), _) => existing,
             (None, value) => value,
         });

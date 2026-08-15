@@ -1,5 +1,7 @@
 # FinalProject_RustMiniOS
 
+[![CI](https://github.com/IvesLiu1026/FinalProject_RustMiniOS/actions/workflows/ci.yml/badge.svg)](https://github.com/IvesLiu1026/FinalProject_RustMiniOS/actions/workflows/ci.yml)
+
 Bare-metal Rust MiniOS for the shared `STM32F407ZG + 320x240 ILI9341 resistive-touch TFT` board.
 
 This project turns the board into a small touch-first desktop shell with multiple apps, arcade-style games, diagnostics, persistence, and a portable firmware release flow.
@@ -106,6 +108,16 @@ MINIOS_EMBED_ALBUM=0 cargo build --release
 ```
 
 More details: [docs/mac-companion.md](docs/mac-companion.md)
+
+## Public repository policy
+
+The tracked media is limited to redistributable CC0 samples and deterministic
+derived firmware assets. Personal media, local build output, signing material,
+device credentials, and development environment files remain ignored.
+
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md),
+[SECURITY.md](SECURITY.md), and [LICENSE.md](LICENSE.md) before redistributing
+any part of the project.
 
 ## Verification
 

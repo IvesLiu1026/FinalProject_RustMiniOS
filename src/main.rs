@@ -13,12 +13,12 @@ mod font_zh;
 mod jpeg_demo;
 mod media;
 mod shell;
+mod shell_contract;
 mod storage;
 mod storage_codec;
 mod system_info;
 mod touch;
 mod ui;
-mod shell_contract;
 
 use board::{millis, Board};
 use cortex_m_rt::{entry, exception};

@@ -8,7 +8,7 @@
 
 The linker keeps the top `128 KiB` of the MCU flash for persistent storage, so the firmware image does not get the full `1 MiB`.
 
-From [memory.x](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/memory.x):
+From [memory.x](./memory.x):
 
 - app flash region: `896 KiB` (`917,504 bytes`)
 - storage region: `128 KiB` (`131,072 bytes`)

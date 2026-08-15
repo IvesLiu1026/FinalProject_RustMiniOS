@@ -1363,14 +1363,19 @@ impl AutoBattleApp {
         let hp_y = py.saturating_sub(18) as u16;
         let xp_y = py.saturating_sub(13) as u16;
         let bar_w = 24u16;
-        let hp_fill = ((self.health.max(0) as u32 * bar_w as u32) / self.max_health.max(1) as u32)
-            as u16;
+        let hp_fill =
+            ((self.health.max(0) as u32 * bar_w as u32) / self.max_health.max(1) as u32) as u16;
         let xp_target = Self::xp_to_next_level(self.profile.player_level).max(1) as u32;
-        let xp_fill =
-            ((self.profile.player_xp.min(xp_target as u16) as u32 * bar_w as u32) / xp_target)
-                as u16;
+        let xp_fill = ((self.profile.player_xp.min(xp_target as u16) as u32 * bar_w as u32)
+            / xp_target) as u16;
 
-        display.fill_rect(bar_x, hp_y, bar_w, 3, color::mix(ui.shadow, ui.panel_alt, 34));
+        display.fill_rect(
+            bar_x,
+            hp_y,
+            bar_w,
+            3,
+            color::mix(ui.shadow, ui.panel_alt, 34),
+        );
         if hp_fill > 0 {
             display.fill_rect(
                 bar_x,

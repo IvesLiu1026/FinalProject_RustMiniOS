@@ -37,7 +37,7 @@
 
 ## 2. Flash 版圖
 
-目前 linker 配置在 [memory.x](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/memory.x)：
+目前 linker 配置在 [memory.x](./memory.x)：
 
 ```ld
 FLASH   : ORIGIN = 0x08000000, LENGTH = 896K
@@ -106,7 +106,7 @@ storage 區本身：
 
 ## 4. Save Record 結構
 
-目前 storage record 定義在 [src/storage.rs](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/src/storage.rs)，總長度是 `552 bytes`。
+目前 storage record 定義在 [src/storage.rs](./src/storage.rs)，總長度是 `552 bytes`。
 
 ### 4.1 Header 與系統設定
 
@@ -188,7 +188,7 @@ storage 區本身：
 
 ## 6. Diagnostics 頁面檢查了什麼
 
-`Diagnostics` 的 storage 狀態來自 [src/storage.rs](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/src/storage.rs#L119) 的 `inspect()`。
+`Diagnostics` 的 storage 狀態來自 [src/storage.rs](./src/storage.rs#L119) 的 `inspect()`。
 
 它目前會檢查：
 
@@ -220,7 +220,7 @@ storage 區本身：
 
 ## 7. Clear Save Data 與 Factory Reset 的差別
 
-這兩個操作在 [src/main.rs](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/src/main.rs#L744)。
+這兩個操作在 [src/main.rs](./src/main.rs#L744)。
 
 ### `Clear Save Data`
 
@@ -320,7 +320,7 @@ storage 區本身：
 ### 驗證 3: Build 與 size
 
 ```bash
-cd /Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS
+cd ./
 cargo build --release
 ~/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-size \
   target/thumbv7em-none-eabihf/release/finalproject_rustminios

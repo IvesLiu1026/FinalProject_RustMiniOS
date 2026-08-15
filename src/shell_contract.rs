@@ -212,9 +212,7 @@ pub fn reduce_game_center(
             GameCenterOutcome::stay((selected + app_ids.len() - 1) % app_ids.len(), true)
         }
         GameCenterIntent::Next => GameCenterOutcome::stay((selected + 1) % app_ids.len(), true),
-        GameCenterIntent::LaunchCurrent => {
-            GameCenterOutcome::launch(selected, app_ids[selected])
-        }
+        GameCenterIntent::LaunchCurrent => GameCenterOutcome::launch(selected, app_ids[selected]),
         GameCenterIntent::ExitHome => GameCenterOutcome::exit_home(selected),
         GameCenterIntent::SelectSlot(index) => {
             let next_selected = index % app_ids.len();

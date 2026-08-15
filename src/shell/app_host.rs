@@ -1,5 +1,5 @@
-use super::*;
 use super::update::touch_started_in_rect;
+use super::*;
 use crate::shell_contract::{
     reduce_dungeon_host, reduce_map_select, DungeonHostIntent, DungeonHostSignals,
     HostedAppNavigation, MapSelectIntent,
@@ -193,7 +193,9 @@ impl MiniOs {
     ) -> Option<HostedAppUpdateResult> {
         match self.game_center.update(input, touch) {
             GameCenterAction::Launch(app_id) => Some(HostedAppUpdateResult::launch(app_id)),
-            GameCenterAction::ExitHome => Some(HostedAppUpdateResult::exit(AppId::GameCenter, false)),
+            GameCenterAction::ExitHome => {
+                Some(HostedAppUpdateResult::exit(AppId::GameCenter, false))
+            }
             GameCenterAction::Stay => Some(HostedAppUpdateResult::stay(
                 input.k0_just_pressed || input.wkup_just_pressed || touch.just_released,
             )),
@@ -300,7 +302,9 @@ impl MiniOs {
                     self.request_storage_save();
                 }
                 self.auto_battle_redraw = self.auto_battle.take_redraw_request();
-                Some(HostedAppUpdateResult::stay(self.auto_battle_redraw.is_some()))
+                Some(HostedAppUpdateResult::stay(
+                    self.auto_battle_redraw.is_some(),
+                ))
             }
         }
     }
@@ -312,7 +316,9 @@ impl MiniOs {
         dt_ms: u32,
     ) -> Option<HostedAppUpdateResult> {
         match self.tap_rush.update(input, touch, dt_ms) {
-            TapRushAction::ExitGameCenter => Some(HostedAppUpdateResult::exit(AppId::TapRush, true)),
+            TapRushAction::ExitGameCenter => {
+                Some(HostedAppUpdateResult::exit(AppId::TapRush, true))
+            }
             TapRushAction::Stay => Some(HostedAppUpdateResult::stay(
                 self.tap_rush.needs_animation() || self.tap_rush.take_redraw_request(),
             )),

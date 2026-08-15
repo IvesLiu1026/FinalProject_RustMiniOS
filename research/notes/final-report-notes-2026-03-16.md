@@ -129,7 +129,7 @@
 
 這次問題的根因與修法已整理在：
 
-- [docs/bss-debugging-notes.md](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/docs/bss-debugging-notes.md)
+- [docs/bss-debugging-notes.md](./docs/bss-debugging-notes.md)
 
 核心解法有兩層：
 
@@ -141,7 +141,7 @@
 後來另一個瓶頸變成 flash，特別是 Album 內建圖片與動圖。  
 我們做過一次完整的 flash 分析，並實驗把 Album 改走 `Mac companion` 路線：
 
-- [docs/flash-usage-analysis-2026-03-16.md](/Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/docs/flash-usage-analysis-2026-03-16.md)
+- [docs/flash-usage-analysis-2026-03-16.md](./docs/flash-usage-analysis-2026-03-16.md)
 
 這份分析的重點是：
 
@@ -181,7 +181,7 @@
 
 板上驗證流程整理在：
 
-- [research/notes/smoke-test-checklist.md](/Users/ivesliu/Documents/MCU2026/FinalProject_RustMiniOS/research/notes/smoke-test-checklist.md)
+- [research/notes/smoke-test-checklist.md](./research/notes/smoke-test-checklist.md)
 
 包含：
 

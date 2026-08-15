@@ -11,10 +11,10 @@
 先跑：
 
 ```bash
-cd /Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS/host_checks
+cd ./host_checks
 cargo test
 
-cd /Users/ivesliu/Documents/MCP2026/FinalProject_RustMiniOS
+cd ./
 cargo build --release
 ~/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-size target/thumbv7em-none-eabihf/release/finalproject_rustminios
 ```
